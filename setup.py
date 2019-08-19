@@ -5,7 +5,7 @@ from setuptools import setup, Extension
 # compile with $> python setup.py build_ext --inplace
 # change file extensions to .pyx to add type annotations
 # ext_modules = cythonize([
-#     Extension("qradient.circuit_logic", ["qradient/circuit_logic.py"])#,
+#     Extension("qradient.circuit_logic", ["qradient/circuit_logic.py"]),
 #     Extension("qradient.physical_components", ["qradient/physical_components.py"])
 # ])
 
