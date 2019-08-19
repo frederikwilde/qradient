@@ -131,9 +131,10 @@ class RateDecayOnPlateau(GradientDescentOptimizer):
         self.iter += 1
         if new_cost > self.cost:
             self.plateau_counter += 1
+            if self.plateau_counter >= self.plateau_length:
+                self.step_size *= self.decay_rate
+                self.plateau_counter = 0
         else:
             self.cost = new_cost
-        if self.plateau_counter >= self.plateau_length:
-            self.step_size *= self.decay_rate
             self.plateau_counter = 0
         self.parameters -= self.step_size * gradient
