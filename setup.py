@@ -19,9 +19,10 @@ setup(
     url='https://github.com/frederikwilde/qradient',
     # license='MIT',
     packages=['qradient'],
-    # install_requires=[
-    # 'numpy',
-    # 'sympy',
-    # 'tncontract'],
+    install_requires=[
+        'scipy',
+        'tqdm',
+        'Cython'
+    ],
     # zip_safe=False
 )
