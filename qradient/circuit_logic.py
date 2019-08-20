@@ -99,10 +99,10 @@ class McClean(ParametrizedCircuit):
         ParametrizedCircuit.load_observable(self, observable)
 
     def run(self, hide_progbar=True, ini_state=None):
-        if ini_state is none:
+        if ini_state is None:
             self.state.reset()
         else:
-            self.state = ini_state
+            self.state.vec = ini_state
         qrange = np.arange(self.qnum)
         for q in qrange:
             self.state.yrot(np.pi/4., q)
@@ -116,10 +116,10 @@ class McClean(ParametrizedCircuit):
                 self.__rot(i, q)
 
     def grad_run(self, hide_progbar=True, ini_state=None):
-        if ini_state is none:
+        if ini_state is None:
             self.state.reset()
         else:
-            self.state = ini_state
+            self.state.vec = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
@@ -155,10 +155,10 @@ class McClean(ParametrizedCircuit):
         if not self.has_loaded_projectors:
             self.__load_projectors()
             self.has_loaded_projectors = True
-        if ini_state is none:
+        if ini_state is None:
             self.state.reset()
         else:
-            self.state = ini_state
+            self.state.vec = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
@@ -217,10 +217,10 @@ class McClean(ParametrizedCircuit):
             self.sample_gradient_observable = True
             self.has_loaded_projectors = True
         # prepare to run circuit
-        if ini_state is none:
+        if ini_state is None:
             self.state.reset()
         else:
-            self.state = ini_state
+            self.state.vec = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
