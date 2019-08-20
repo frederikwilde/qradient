@@ -92,13 +92,17 @@ class McClean(ParametrizedCircuit):
         # for sampling the gradient in sample_grad()
         self.projectors_loaded = False
         self.sample_gradient_observable = False
+        self.has_loaded_projectors = False
 
     def load_observable(self, observable):
         self.projectors_loaded = False # to make sample_grad reload projectors
         ParametrizedCircuit.load_observable(self, observable)
 
-    def run(self, hide_progbar=True):
-        self.state.reset()
+    def run(self, hide_progbar=True, ini_state=None):
+        if ini_state is none:
+            self.state.reset()
+        else:
+            self.state = ini_state
         qrange = np.arange(self.qnum)
         for q in qrange:
             self.state.yrot(np.pi/4., q)
@@ -111,8 +115,11 @@ class McClean(ParametrizedCircuit):
             for q in qrange:
                 self.__rot(i, q)
 
-    def grad_run(self, hide_progbar=True):
-        self.state.reset()
+    def grad_run(self, hide_progbar=True, ini_state=None):
+        if ini_state is none:
+            self.state.reset()
+        else:
+            self.state = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
@@ -144,9 +151,14 @@ class McClean(ParametrizedCircuit):
             self.state.cnot_ladder(1)
         return expec_val, grad
 
-    def sample_grad(self, hide_progbar=True, shot_num=1, exact_expec_val=True):
-        self.__load_projectors()
-        self.state.reset()
+    def sample_grad(self, hide_progbar=True, shot_num=1, exact_expec_val=True, ini_state=None):
+        if not self.has_loaded_projectors:
+            self.__load_projectors()
+            self.has_loaded_projectors = True
+        if ini_state is none:
+            self.state.reset()
+        else:
+            self.state = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
@@ -188,7 +200,7 @@ class McClean(ParametrizedCircuit):
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
-    def sample_grad_observable(self, shot_num=1, hide_progbar=True):
+    def sample_grad_observable(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
         '''Estimates the gradient by shot_num measurements.
 
         This method assumes that one can measure the observable as it is. For generic
@@ -201,9 +213,14 @@ class McClean(ParametrizedCircuit):
             self.eigensystem = np.linalg.eigh(self.observable_mat.asformat('array'))
             self.lhs = McClean.LeftHandSide(self.eigensystem[1], self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.__load_projectors()
             self.sample_gradient_observable = True
+            self.has_loaded_projectors = True
         # prepare to run circuit
-        self.state.reset()
+        if ini_state is none:
+            self.state.reset()
+        else:
+            self.state = ini_state
         qrange = np.arange(self.qnum)
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         # run circuit
@@ -221,6 +238,11 @@ class McClean(ParametrizedCircuit):
         # calculate expectation value
         self.state.multiply_matrix(self.observable_mat)
         expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
+        if exact_expec_val:
+            self.state.multiply_matrix(self.observable_mat)
+            expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
+        else:
+            expec_val = self.__apply_projectors(shot_num)
         # run reverse circuit
         self.lhs.matrix = sp.csr_matrix(self.eigensystem[1]).transpose()
         self.lhs_history[0] = self.eigensystem[1].transpose()
