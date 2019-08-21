@@ -43,8 +43,8 @@ class State:
         '''Applies a one-dimensional ladder of CNOT gates
 
         Args:
-            stacking (int): The even to uneven layers are coupled first (i.e. 0-1,
-                2-3, ... and 1-2, 3-4, ... in the second stack) for stacking=0.
+            stacking (int): The even to uneven qubits are coupled first (i.e. 0-1,
+                2-3, ... and 1-2, 3-4, ... in the second layer) for stacking=0.
                 For stacking=1 the order is reversed.
         '''
         self.vec = self.gates.cnot_ladder[stacking].dot(self.vec)
@@ -77,6 +77,10 @@ class Gates:
     def __init__(self, qubit_number):
         self.qnum = qubit_number
         self.custom = {}
+
+    def add_custom_gate(self, key, matrix):
+        self.custom[key] = matrix
+        return self
 
     def add_xrots(self):
         self.xrot = np.ndarray(self.qnum, dtype=sp.csr_matrix)
@@ -155,10 +159,6 @@ are ambiguous for uneven number of qubits.')
             self.cnot_ladder[1] = self.cnot_ladder[1].dot(cnots[i, (i+1)%self.qnum])
         return self
 
-    def add_custom_gate(self, key, matrix):
-        self.custom[key] = matrix
-        return self
-
     def __cnot(self, i, j):
         '''Controlled NOT gate. First argument is the control qubit.'''
         if i < j and j < self.qnum:
@@ -180,3 +180,14 @@ are ambiguous for uneven number of qubits.')
         else:
             raise ValueError('Invalid CNOT indecies {} and {}, for {} qubits.'.format(i, j, self.qnum))
         return (out1 + out2).asformat('csr')
+
+    def add_xfield(self):
+        '''Single-qubit x terms on each qubit.'''
+        self.xfield = np.ndarray((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
+        for i in range(self.qnum):
+            self.xrot[i] = -1.j * sp.kron(
+                sp.kron(Gates.__id(i), Gates.__x),
+                Gates.__id(self.qnum-i-1),
+                format='csr'
+            )
+        return self

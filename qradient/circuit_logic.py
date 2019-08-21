@@ -9,9 +9,18 @@ kr = sp.kron
 
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
-    def init(self, qubit_number, observable):
+    def init(self, qubit_number, observable, state_ini='0'):
         self.qnum = qubit_number
         self.load_observable(observable)
+        self.state = State(qubit_number, gates=None, ini=state_ini)
+        self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
+        # FLAGS
+        self.has_loaded_projectors = False
+
+    def expec_val(self):
+        return self.state.vec.conj().dot(
+            self.observable_mat.dot(self.state.vec)
+        ).real
 
     def load_observable(self, observable):
         '''Takes a dictionary specifying the observable and builds the matrix.
@@ -47,11 +56,18 @@ class ParametrizedCircuit:
                     self.observable_mat += weight * op
         if 'zz' in observable:
             for i in range(self.qnum):
+                for j in range(i+1):
+                    if observable['zz'][i, j] != None:
+                        raise ValueError(
+'zz of observable should be a upper triangular {} by {} matrix. Diagonal and lower \
+triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observable['zz'][i, j])
+                        )
                 for j in range(i+1, self.qnum):
                     if observable['zz'][i, j] != None:
                         op = kr(kr(sp.identity(2**i), z), sp.identity(2**(j-i-1)))
                         op = kr(kr(op, z), sp.identity(2**(self.qnum-j-1)))
                         self.observable_mat += observable['zz'][i, j] * op
+        self.has_loaded_projectors = False
 
     def check_observable(self, known_keys):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''
@@ -63,10 +79,65 @@ class ParametrizedCircuit:
             if unknown:
                 warnings.warn('Unknown element of observable {} will be ignored.'.format(key))
 
-    def expec_val(self):
-        return self.state.vec.conj().dot(
-            self.observable_mat.dot(self.state.vec)
-        ).real
+    def __load_projectors(self):
+        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        # construct pauli projectors
+        projectors = []
+        projector_weights = []
+        x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
+        y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
+        z_proj_pos = sp.csr_matrix([[1., 0.], [0., 0.]], dtype='complex') # projects on the +1 subspace
+        z_proj_neg = sp.csr_matrix([[0., 0.], [0., 1.]], dtype='complex') # projects on the -1 subspace
+        # read the content of observable
+        x = self.observable.get('x', np.full(self.qnum, None))
+        y = self.observable.get('y', np.full(self.qnum, None))
+        z = self.observable.get('z', np.full(self.qnum, None))
+        zz = self.observable.get('zz', np.full([self.qnum, self.qnum], None))
+        for i in range(self.qnum):
+            id1 = sp.identity(2**i, dtype='complex')
+            id2 = sp.identity(2**(self.qnum-i-1), dtype='complex')
+            if x[i] != None:
+                projectors.append(kr(id1, kr(x_proj_pos, id2), format='csr'))
+                projector_weights.append(x[i])
+            if y[i] != None:
+                projectors.append(kr(id1, kr(y_proj_pos, id2), format='csr'))
+                projector_weights.append(y[i])
+            if z[i] != None:
+                projectors.append(sp.diags(self.state.gates.zrot_pos[i], format='csr'))
+                projector_weights.append(z[i])
+            for j in range(i+1, self.qnum):
+                if zz[i, j] != None:
+                    id3 = sp.identity(2**(j-i-1), dtype='complex')
+                    id4 = sp.identity(2**(self.qnum-j-1), dtype='complex')
+                    upup = kr(
+                        id1,
+                        kr(z_proj_pos, kr(id3, kr(z_proj_pos, id4))),
+                        format='csr'
+                    )
+                    downdown = kr(
+                        id1,
+                        kr(z_proj_neg, kr(id3, kr(z_proj_neg, id4))),
+                        format='csr'
+                    )
+                    projectors.append(upup + downdown)
+                    projector_weights.append(zz[i, j])
+            self.projectors = np.array(projectors)
+            self.projector_weights = np.array(projector_weights)
+
+    def __sample_expec_val(self, shot_num):
+        if not self.has_loaded_projectors:
+            self.__load_projectors()
+            self.has_loaded_projectors = True
+        self.tmp_vec = self.state.vec # for resetting
+        expec_val = 0.
+        for i, op in np.ndenumerate(self.projectors):
+            self.state.multiply_matrix(op)
+            prob = (np.abs(self.state.vec)**2).sum()
+            weight = self.projector_weights[i]
+            rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
+            expec_val += rnd_var.rvs(size=shot_num).mean()
+            self.state.vec = self.tmp_vec
+        return expec_val
 
 class McClean(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number, **kwargs):
@@ -76,24 +147,19 @@ class McClean(ParametrizedCircuit):
         self.axes = kwargs.get('axes', (3 * np.random.rand(self.lnum, self.qnum)).astype('int'))
         self.angles = kwargs.get('angles', 2*np.pi * np.random.rand(self.lnum, self.qnum))
         # load gates
-        gates = Gates(self.qnum) \
+        self.state.gates = Gates(self.qnum) \
             .add_xrots() \
             .add_yrots() \
             .add_zrots() \
             .add_cnot_ladder()
-        # build state
-        self.state = State(self.qnum, gates)
         # for calculating the gradient
         self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
-        self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
         # FLAGS
         self.has_loaded_eigensystem = False
-        self.has_loaded_projectors = False
 
     def load_observable(self, observable):
         ParametrizedCircuit.load_observable(self, observable)
         self.has_loaded_eigensystem = False
-        self.has_loaded_projectors = False
 
     def run_expec_val(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
@@ -196,6 +262,7 @@ class McClean(ParametrizedCircuit):
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
+    # NOTE: rename this to sample_grad_dense
     def sample_grad_observable(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
         '''Estimates the gradient by shot_num measurements.
 
@@ -206,9 +273,10 @@ class McClean(ParametrizedCircuit):
         '''
         # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
         if not self.has_loaded_eigensystem:
-            self.eigensystem = np.linalg.eigh(self.observable_mat.asformat('array'))
-            self.lhs = McClean.LeftHandSide(self.eigensystem[1], self.state.gates)
+            self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable_mat.asformat('array'))
+            self.lhs = McClean.LeftHandSide(eigenvectors.transpose(), self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
             self.has_loaded_eigensystem = True
         # prepare to run circuit
         if ini_state is None:
@@ -238,8 +306,7 @@ class McClean(ParametrizedCircuit):
         else:
             expec_val = self.__sample_expec_val(shot_num)
         # run reverse circuit
-        self.lhs.matrix = sp.csr_matrix(self.eigensystem[1]).transpose()
-        self.lhs_history[0] = self.eigensystem[1].transpose()
+        self.lhs.reset()
         for i in rng(self.lnum-1): # we don't need the last one
             i_inv = self.lnum - i - 1
             for q in qrange:
@@ -249,18 +316,18 @@ class McClean(ParametrizedCircuit):
             # Since the lhs matrix is dense after a few layers, we store it dense,
             # but keep it in sparse format for multiplication with sparse gates.
             self.lhs_history[i+1] = self.lhs.matrix.asformat('array')
-        # caculate gradient one-shot measurements
+        # calculate gradient finite-shot measurements
         for i in rng(self.lnum):
             self.state.vec = self.state_history[i]
             for q in qrange:
                 self.__manual_rot(i, q, np.pi/2)
                 dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
                 rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
-                sample1 = (self.eigensystem[0][rnd_var.rvs(size=shot_num)]).mean()
+                sample1 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
                 self.__manual_rot(i, q, -np.pi)
                 dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
                 rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
-                sample2 = (self.eigensystem[0][rnd_var.rvs(size=shot_num)]).mean()
+                sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
                 self.state.vec = self.state_history[i]
                 grad[i, q] = (sample1 - sample2)/2.
         return expec_val, grad
@@ -270,7 +337,8 @@ class McClean(ParametrizedCircuit):
         def __init__(self, matrix, gates):
             # the matrix itself quickly becomes dense, but multiplication with sparse
             # gates is still more efficient with sparse method.
-            self.matrix = sp.csr_matrix(matrix, dtype='complex')
+            self.ini_matrix = sp.csr_matrix(matrix, dtype='complex')
+            self.matrix = self.ini_matrix
             self.gates = gates
             self.id = sp.identity(2**gates.qnum, dtype='complex', format='csr')
         def rot(self, axis, angle, q):
@@ -291,67 +359,9 @@ class McClean(ParametrizedCircuit):
                 raise ValueError('Invalid axis {}'.format(axis))
         def cnot_ladder(self):
             self.matrix = self.matrix.dot(self.gates.cnot_ladder[0])
+        def reset(self):
+            self.matrix = self.ini_matrix
     # end LeftHandSide
-
-    def __sample_expec_val(self, shot_num):
-        if not self.has_loaded_projectors:
-            self.__load_projectors()
-            self.has_loaded_projectors = True
-        self.tmp_vec = self.state.vec # for resetting
-        expec_val = 0.
-        for i, op in np.ndenumerate(self.projectors):
-            self.state.multiply_matrix(op)
-            prob = (np.abs(self.state.vec)**2).sum()
-            weight = self.projector_weights[i]
-            rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
-            expec_val += rnd_var.rvs(size=shot_num).mean()
-            self.state.vec = self.tmp_vec
-        return expec_val
-
-    def __load_projectors(self):
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
-        # construct pauli projectors
-        projectors = []
-        projector_weights = []
-        x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
-        y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
-        z_proj_pos = sp.csr_matrix([[1., 0.], [0., 0.]], dtype='complex') # projects on the +1 subspace
-        z_proj_neg = sp.csr_matrix([[0., 0.], [0., 1.]], dtype='complex') # projects on the -1 subspace
-        # read the content of observable
-        x = self.observable.get('x', np.full(self.qnum, None))
-        y = self.observable.get('y', np.full(self.qnum, None))
-        z = self.observable.get('z', np.full(self.qnum, None))
-        zz = self.observable.get('zz', np.full([self.qnum, self.qnum], None))
-        for i in range(self.qnum):
-            id1 = sp.identity(2**i, dtype='complex')
-            id2 = sp.identity(2**(self.qnum-i-1), dtype='complex')
-            if x[i] != None:
-                projectors.append(kr(id1, kr(x_proj_pos, id2), format='csr'))
-                projector_weights.append(x[i])
-            if y[i] != None:
-                projectors.append(kr(id1, kr(y_proj_pos, id2), format='csr'))
-                projector_weights.append(y[i])
-            if z[i] != None:
-                projectors.append(sp.diags(self.state.gates.zrot_pos[i], format='csr'))
-                projector_weights.append(z[i])
-            for j in range(i+1, self.qnum):
-                if zz[i, j] != None:
-                    id3 = sp.identity(2**(j-i-1), dtype='complex')
-                    id4 = sp.identity(2**(self.qnum-j-1), dtype='complex')
-                    upup = kr(
-                        id1,
-                        kr(z_proj_pos, kr(id3, kr(z_proj_pos, id4))),
-                        format='csr'
-                    )
-                    downdown = kr(
-                        id1,
-                        kr(z_proj_neg, kr(id3, kr(z_proj_neg, id4))),
-                        format='csr'
-                    )
-                    projectors.append(upup + downdown)
-                    projector_weights.append(zz[i, j])
-            self.projectors = np.array(projectors)
-            self.projector_weights = np.array(projector_weights)
 
     def __rot(self, i, q, angle_sign=1.):
         ax = self.axes[i, q]
@@ -387,7 +397,7 @@ class McClean(ParametrizedCircuit):
             raise ValueError('Invalid axis {}'.format(ax))
 
     ############################################################################
-    # outdated methods:
+    # outdated method:
     def grad(self, hide_progbar=True):
         ##### Plain and stupid. Not efficient.
         warnings.warn('This function is very inefficient, use grad_run instead.')
@@ -418,16 +428,13 @@ class MeynardClassifier(ParametrizedCircuit):
         self.dlnum = data_layer_number
         self.clnum = classification_layer_number
         # load gates
-        gates = Gates(self.qnum) \
+        self.state.gates = Gates(self.qnum) \
             .add_xrots() \
             .add_yrots() \
             .add_zrots() \
             .add_cnot_ladder(periodic=False)
-        # build state
-        self.state = State(self.qnum, gates)
         # for calculating the gradient
         self.state_history = np.ndarray([2*self.dlnum + 3*self.clnum + 1, 2**self.qnum], dtype='complex')
-        self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
 
     def run(self, data, encoding_parameters, classification_parameters, hide_progbar=True):
         self.state.reset()
@@ -545,3 +552,29 @@ class MeynardClassifier(ParametrizedCircuit):
             for q in qrange:
                 self.state.xrot(-data[i, q], q)
         return expec_val, encoding_grad, classification_grad
+
+class Qaoa(ParametrizedCircuit):
+    def __init__(self, qubit_number, observable, layer_number):
+        ParametrizedCircuit.init(self, qubit_number, observable, state_ini='+')
+        self.lnum = layer_number
+        # load gates
+        self.state.gates = Gates(self.qnum) \
+            .add_xrots() \
+            .add_zrots() \
+        # for calculating the gradient
+        self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
+        # FLAGS
+        self.has_loaded_eigensystem = False
+
+    def load_observable(self, observable):
+        ParametrizedCircuit.load_observable(self, observable)
+        self.has_loaded_eigensystem = False
+
+    def grad_run(self, betas, gammas, hide_progbar=True):
+        pass
+
+    def sample_grad(self, betas, gammas, hide_progbar=True):
+        pass
+
+    def sample_grad_dense(self, betas, gammas, hide_progbar=True):
+        pass
