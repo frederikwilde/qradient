@@ -68,9 +68,6 @@ class ParametrizedCircuit:
             self.observable_mat.dot(self.state.vec)
         ).real
 
-    def run(self):
-        pass
-
 class McClean(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number, **kwargs):
         ParametrizedCircuit.init(self, qubit_number, observable)
@@ -89,33 +86,16 @@ class McClean(ParametrizedCircuit):
         # for calculating the gradient
         self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
         self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
-        # for sampling the gradient in sample_grad()
-        self.projectors_loaded = False
-        self.sample_gradient_observable = False
+        # FLAGS
+        self.has_loaded_eigensystem = False
         self.has_loaded_projectors = False
 
     def load_observable(self, observable):
-        self.projectors_loaded = False # to make sample_grad reload projectors
         ParametrizedCircuit.load_observable(self, observable)
+        self.has_loaded_eigensystem = False
+        self.has_loaded_projectors = False
 
-    def run(self, hide_progbar=True, ini_state=None):
-        if ini_state is None:
-            self.state.reset()
-        else:
-            self.state.vec = ini_state
-        qrange = np.arange(self.qnum)
-        for q in qrange:
-            self.state.yrot(np.pi/4., q)
-        if hide_progbar:
-            rng = range
-        else:
-            rng = tnrange
-        for i in rng(self.lnum):
-            self.state.cnot_ladder(0)
-            for q in qrange:
-                self.__rot(i, q)
-
-    def run_exp_val(self, hide_progbar=True, ini_state=None):
+    def run_expec_val(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
             self.state.reset()
         else:
@@ -130,14 +110,9 @@ class McClean(ParametrizedCircuit):
             rng = tnrange
         for i in rng(self.lnum):
             self.state.cnot_ladder(0)
-            self.state_history[i] = self.state.vec
             for q in qrange:
                 self.__rot(i, q)
-        self.state_history[self.lnum] = self.state.vec
-        # calculate expecation value
-        self.state.multiply_matrix(self.observable_mat)
-        expec_val = self.state_history[-1].conj().dot(self.state.vec).real
-        return expec_val
+        return self.expec_val()
 
     def grad_run(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
@@ -233,12 +208,13 @@ class McClean(ParametrizedCircuit):
         Returns the exact expectation value!
         '''
         # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
-        if not self.sample_gradient_observable:
+        if not self.has_loaded_eigensystem:
             self.eigensystem = np.linalg.eigh(self.observable_mat.asformat('array'))
             self.lhs = McClean.LeftHandSide(self.eigensystem[1], self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.has_loaded_eigensystem = True
+        if not self.has_loaded_projectors:
             self.__load_projectors()
-            self.sample_gradient_observable = True
             self.has_loaded_projectors = True
         # prepare to run circuit
         if ini_state is None:
@@ -296,7 +272,7 @@ class McClean(ParametrizedCircuit):
         return expec_val, grad
 
     class LeftHandSide:
-        '''A helper class for sample_gradient_observable.'''
+        '''A helper class for sample_grad_observable.'''
         def __init__(self, matrix, gates):
             # the matrix itself quickly becomes dense, but multiplication with sparse
             # gates is still more efficient with sparse method.
@@ -337,8 +313,6 @@ class McClean(ParametrizedCircuit):
         return expec_val
 
     def __load_projectors(self):
-        if self.projectors_loaded:
-            return None
         self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
         # construct pauli projectors
         projectors = []
@@ -382,7 +356,6 @@ class McClean(ParametrizedCircuit):
                     projector_weights.append(zz[i, j])
             self.projectors = np.array(projectors)
             self.projector_weights = np.array(projector_weights)
-        self.projectors_loaded = True
 
     def __rot(self, i, q, angle_sign=1.):
         ax = self.axes[i, q]
