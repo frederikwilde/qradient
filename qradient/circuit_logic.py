@@ -115,6 +115,30 @@ class McClean(ParametrizedCircuit):
             for q in qrange:
                 self.__rot(i, q)
 
+    def run_exp_val(self, hide_progbar=True, ini_state=None):
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        qrange = np.arange(self.qnum)
+        # run circuit
+        for q in qrange:
+            self.state.yrot(np.pi/4., q)
+        if hide_progbar:
+            rng = np.arange
+        else:
+            rng = tnrange
+        for i in rng(self.lnum):
+            self.state.cnot_ladder(0)
+            self.state_history[i] = self.state.vec
+            for q in qrange:
+                self.__rot(i, q)
+        self.state_history[self.lnum] = self.state.vec
+        # calculate expecation value
+        self.state.multiply_matrix(self.observable_mat)
+        expec_val = self.state_history[-1].conj().dot(self.state.vec).real
+        return expec_val
+
     def grad_run(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
             self.state.reset()
@@ -338,7 +362,7 @@ class McClean(ParametrizedCircuit):
                 projectors.append(kr(id1, kr(y_proj_pos, id2), format='csr'))
                 projector_weights.append(y[i])
             if z[i] != None:
-                projectors.append(sp.diags(self.state.gates.zrot_pos[j], format='csr'))
+                projectors.append(sp.diags(self.state.gates.zrot_pos[i], format='csr'))
                 projector_weights.append(z[i])
             for j in range(i+1, self.qnum):
                 if zz[i, j] != None:
