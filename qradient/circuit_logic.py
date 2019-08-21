@@ -151,9 +151,6 @@ class McClean(ParametrizedCircuit):
         return expec_val, grad
 
     def sample_grad(self, hide_progbar=True, shot_num=1, exact_expec_val=True, ini_state=None):
-        if not self.has_loaded_projectors:
-            self.__load_projectors()
-            self.has_loaded_projectors = True
         if ini_state is None:
             self.state.reset()
         else:
@@ -178,7 +175,7 @@ class McClean(ParametrizedCircuit):
             expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
             self.state.vec = self.state_history[self.lnum-1]
         else:
-            expec_val = self.__apply_projectors(shot_num)
+            expec_val = self.__sample_expec_val(shot_num)
         # run circuit again with parameter shifts
         for i in rng(self.lnum):
             for dq in qrange:
@@ -188,14 +185,14 @@ class McClean(ParametrizedCircuit):
                     self.state.cnot_ladder(0)
                     for q in qrange:
                         self.__rot(j, q)
-                o_plus = self.__apply_projectors(shot_num)
+                o_plus = self.__sample_expec_val(shot_num)
                 self.state.vec = self.state_history[i]
                 self.__manual_rot(i, dq, -np.pi/2)
                 for j in np.arange(i+1, self.lnum):
                     self.state.cnot_ladder(0)
                     for q in qrange:
                         self.__rot(j, q)
-                o_minus = self.__apply_projectors(shot_num)
+                o_minus = self.__sample_expec_val(shot_num)
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
@@ -213,9 +210,6 @@ class McClean(ParametrizedCircuit):
             self.lhs = McClean.LeftHandSide(self.eigensystem[1], self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
             self.has_loaded_eigensystem = True
-        if not self.has_loaded_projectors:
-            self.__load_projectors()
-            self.has_loaded_projectors = True
         # prepare to run circuit
         if ini_state is None:
             self.state.reset()
@@ -242,7 +236,7 @@ class McClean(ParametrizedCircuit):
             self.state.multiply_matrix(self.observable_mat)
             expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
         else:
-            expec_val = self.__apply_projectors(shot_num)
+            expec_val = self.__sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.matrix = sp.csr_matrix(self.eigensystem[1]).transpose()
         self.lhs_history[0] = self.eigensystem[1].transpose()
@@ -299,13 +293,15 @@ class McClean(ParametrizedCircuit):
             self.matrix = self.matrix.dot(self.gates.cnot_ladder[0])
     # end LeftHandSide
 
-    def __apply_projectors(self, shot_num):
+    def __sample_expec_val(self, shot_num):
+        if not self.has_loaded_projectors:
+            self.__load_projectors()
+            self.has_loaded_projectors = True
         self.tmp_vec = self.state.vec # for resetting
         expec_val = 0.
         for i, op in np.ndenumerate(self.projectors):
-            norm = np.linalg.norm(self.state.vec)
             self.state.multiply_matrix(op)
-            prob = (np.abs(self.state.vec)**2).sum() / norm
+            prob = (np.abs(self.state.vec)**2).sum()
             weight = self.projector_weights[i]
             rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
             expec_val += rnd_var.rvs(size=shot_num).mean()
