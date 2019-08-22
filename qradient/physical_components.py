@@ -1,6 +1,7 @@
 import scipy.sparse as sp
 import scipy.sparse.linalg as lg
 import numpy as np
+from logging import info
 
 class State:
     def __init__(self, qubit_number, gates=None, ini='0'):
@@ -55,7 +56,9 @@ class State:
     def multiply_matrix(self, matrix):
         self.vec = matrix.dot(self.vec)
 
-    def reset(self):
+    def reset(self, ini=None):
+        if not ini == None:
+            self.__ini = ini
         if self.__ini == '0':
             self.vec = np.zeros(2**self.qnum, dtype='complex')
             self.vec[0] = 1.
@@ -182,7 +185,8 @@ are ambiguous for uneven number of qubits.')
         return (out1 + out2).asformat('csr')
 
     def add_xfield(self):
-        '''Single-qubit x terms on each qubit.'''
+        '''Single-qubit x terms on each qubit. Dense matrix.'''
+        info('xfield is a dense gate.')
         self.xfield = np.ndarray((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         for i in range(self.qnum):
             self.xrot[i] = -1.j * sp.kron(

@@ -9,10 +9,10 @@ kr = sp.kron
 
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
-    def init(self, qubit_number, observable, state_ini='0'):
+    def init(self, qubit_number, observable):
         self.qnum = qubit_number
         self.load_observable(observable)
-        self.state = State(qubit_number, gates=None, ini=state_ini)
+        self.state = State(qubit_number) # gates must be added by particular child class
         self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
         # FLAGS
         self.has_loaded_projectors = False
@@ -555,12 +555,13 @@ class MeynardClassifier(ParametrizedCircuit):
 
 class Qaoa(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number):
-        ParametrizedCircuit.init(self, qubit_number, observable, state_ini='+')
+        ParametrizedCircuit.init(self, qubit_number, observable)
         self.lnum = layer_number
         # load gates
         self.state.gates = Gates(self.qnum) \
             .add_xrots() \
             .add_zrots() \
+        self.state.reset('+') # initialize in uniform-superposition state
         # for calculating the gradient
         self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
         # FLAGS
