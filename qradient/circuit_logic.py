@@ -3,9 +3,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy import stats
 from tqdm import tqdm_notebook, tnrange
-import sys
 import warnings
-kr = sp.kron
 
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''

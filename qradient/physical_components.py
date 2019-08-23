@@ -1,7 +1,7 @@
 import scipy.sparse as sp
 import scipy.sparse.linalg as lg
 import numpy as np
-from logging import info
+import warnings
 kr = sp.kron
 
 class State:
@@ -234,7 +234,7 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
                         self.matrix += observable['zz'][i, j] * op
 
     def load_projectors(self):
-        if has_loaded_projectors: # in case the caller has not checked
+        if self.has_loaded_projectors: # in case the caller has not checked
             return None
         self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
         # construct pauli projectors
@@ -286,7 +286,7 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
         # make sure observable only contains z and zz
         self.__check_observable(
             known_keys=['z', 'zz'],
-            'Non-classical observable component found. Only \'z\' and \'zz\' are accepted.'
+            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted.'
         )
         # build gate
         z = np.array([1., -1.])
@@ -294,11 +294,12 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
         if 'z' in observable:
             for i, weight in enumerate(observable['z']):
                 if weight != None:
-
+                    pass
         if 'zz' in observable:
             for i in range(self.qnum):
                 for j in range(i+1, self.qnum):
                     if observable['zz'][i, j] != None:
+                        pass
         ########## UNFINISHED
         return None
 
