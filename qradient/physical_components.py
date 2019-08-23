@@ -53,11 +53,6 @@ class State:
 
     def classical_ham(self, angle):
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
-        # gate = np.zeros(2**self.qnum, dtype='complex')
-        # for i in np.arange(len(self.gates.classical_ham_weights)):
-        #     gate += np.exp(-1.j * angle * self.gates.classical_ham_weights[i]) * \
-        #         self.gates.classical_ham_components[i]
-        # self.vec *= gate
         self.vec *= np.exp(-1.j * angle * gate)
 
     def custom_gate(self, key):
@@ -320,19 +315,6 @@ class Observable:
                             id(i),
                             kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
                         )
-        ### it turns out that decomposing is less efficient than calculating np.exp(gate), maybe with good compiling
-        # unique = np.unique(gate)
-        # if len(unique) > self.qnum**2:
-        #     warnings.warn((
-        #         'Observable contains many terms, gate decomposition might be ',
-        #         'inefficient. {} different eigenvalues'.format(len(unique))
-        #     ))
-        # gate_components = np.ndarray([len(unique), 2**self.qnum], dtype='complex')
-        # gate_weights = np.ndarray(len(unique), dtype='complex')
-        # for i, weight in enumerate(unique):
-        #     gate_components[i] = (gate == weight) # binary string
-        #     gate_weights[i] = weight
-        # return gate_weights, gate_components
         return gate
 
     def __check_observable(self, known_keys, warning=None):
