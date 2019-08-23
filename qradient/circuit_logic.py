@@ -457,6 +457,9 @@ class MeynardClassifier(ParametrizedCircuit):
 class Qaoa(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number):
         ParametrizedCircuit.init(self, qubit_number, observable)
+        self.state.gates = Gates(qubit_number) \
+            .add_xrots() \
+            .add_classical_ham(self.observable.classical_to_gate())
         self.lnum = layer_number
         self.state.reset('+') # initialize in uniform-superposition state
         # for calculating the gradient
@@ -467,7 +470,28 @@ class Qaoa(ParametrizedCircuit):
     def load_observable(self, observable):
         ParametrizedCircuit.load_observable(self, observable)
         self.has_loaded_eigensystem = False
-        #### load new Hamiltonian gate
+        # Hamiltonian gate components
+        self.state.gates.add_classical_ham(self.observable.classical_to_gate())
+
+    def run_expec_val(self, betas, gammas, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
+        '''Runs the circuit and returns the expectation value under observable'''
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        self.__check_parameters(betas, gammas)
+        if hide_progbar:
+            rng = np.arange
+        else:
+            rng = tnrange
+        # run circuit
+        for i in rng(self.lnum):
+            self.state.classical_ham(gammas[i])
+            self.__xfield(betas[i])
+        if exact_expec_val:
+            return self.expec_val()
+        else:
+            return self.sample_expec_val(shot_num)
 
     def grad_run(self, betas, gammas, hide_progbar=True):
         pass
@@ -477,3 +501,13 @@ class Qaoa(ParametrizedCircuit):
 
     def sample_grad_dense(self, betas, gammas, hide_progbar=True):
         pass
+
+    def __check_parameters(self, betas, gammas):
+        if (len(betas) != self.lnum) or (len(gammas) != self.lnum):
+            raise ValueError((
+                'Wrong amount of parameters. Expected {} and {},'.format(self.lnum, self.lnum),
+                ' found {} and {}.'.format(len(betas), len(gammas))
+            ))
+    def __xfield(self, angle):
+        for q in np.arange(self.qnum):
+            self.state.xrot(angle, q)

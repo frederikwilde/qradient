@@ -51,6 +51,14 @@ class State:
         '''
         self.vec = self.gates.cnot_ladder[stacking].dot(self.vec)
 
+    def classical_ham(self, angle):
+        '''Rotate around a classical Hamiltonian, as done in QAOA.'''
+        gate = np.zeros(2**self.qnum, dtype='complex')
+        for i in np.arange(len(self.gates.classical_ham_weights)):
+            gate += np.exp(-1.j * angle * self.gates.classical_ham_weights[i]) * \
+                self.gates.classical_ham_components[i]
+        self.vec *= gate
+
     def custom_gate(self, key):
         self.vec = self.gates.custom[key].dot(self.vec)
 
@@ -89,8 +97,8 @@ class Gates:
     def add_xrots(self):
         self.xrot = np.ndarray(self.qnum, dtype=sp.csr_matrix)
         for i in range(self.qnum):
-            self.xrot[i] = -1.j * sp.kron(
-                sp.kron(Gates.__id(i), Gates.__x),
+            self.xrot[i] = -1.j * kr(
+                kr(Gates.__id(i), Gates.__x),
                 Gates.__id(self.qnum-i-1),
                 format='csr'
             )
@@ -99,8 +107,8 @@ class Gates:
     def add_yrots(self):
         self.yrot = np.ndarray(self.qnum, dtype=sp.csr_matrix)
         for i in range(self.qnum):
-            self.yrot[i] = -1.j * sp.kron(
-                sp.kron(Gates.__id(i), Gates.__y),
+            self.yrot[i] = -1.j * kr(
+                kr(Gates.__id(i), Gates.__y),
                 Gates.__id(self.qnum-i-1),
                 format='csr'
             )
@@ -133,8 +141,10 @@ class Gates:
     def add_cnot_ladder(self, periodic=False):
         # periodic ladders with uneven qubit number is ambiguous
         if periodic and (self.qnum%2 != 0):
-            raise ValueError('CNOT gates in a ladder structure with periodic boundaries \
-are ambiguous for uneven number of qubits.')
+            raise ValueError((
+                'CNOT gates in a ladder structure with periodic boundaries',
+                'are ambiguous for uneven number of qubits.'
+            ))
         # create 'which'-matrix
         which = np.full((self.qnum, self.qnum), False)
         for i in range(self.qnum-1):
@@ -163,28 +173,32 @@ are ambiguous for uneven number of qubits.')
             self.cnot_ladder[1] = self.cnot_ladder[1].dot(cnots[i, (i+1)%self.qnum])
         return self
 
+    def add_classical_ham(self, classical_ham):
+        self.classical_ham_weights = classical_ham[0]
+        self.classical_ham_components = classical_ham[1]
+        return self
+
     def __cnot(self, i, j):
         '''Controlled NOT gate. First argument is the control qubit.'''
         if i < j and j < self.qnum:
-            out1 = sp.kron(Gates.__id(i), Gates.__proj0)
-            out1 = sp.kron(out1, Gates.__id(self.qnum-i-1))
+            out1 = kr(Gates.__id(i), Gates.__proj0)
+            out1 = kr(out1, Gates.__id(self.qnum-i-1))
 
-            out2 = sp.kron(Gates.__id(i), Gates.__proj1)
-            out2 = sp.kron(out2, Gates.__id(j-i-1))
-            out2 = sp.kron(out2, Gates.__x)
-            out2 = sp.kron(out2, Gates.__id(self.qnum-j-1))
+            out2 = kr(Gates.__id(i), Gates.__proj1)
+            out2 = kr(out2, Gates.__id(j-i-1))
+            out2 = kr(out2, Gates.__x)
+            out2 = kr(out2, Gates.__id(self.qnum-j-1))
         elif i > j and i < self.qnum:
-            out1 = sp.kron(Gates.__id(i), Gates.__proj0)
-            out1 = sp.kron(out1, Gates.__id(self.qnum-i-1))
+            out1 = kr(Gates.__id(i), Gates.__proj0)
+            out1 = kr(out1, Gates.__id(self.qnum-i-1))
 
-            out2 = sp.kron(Gates.__id(j), Gates.__x)
-            out2 = sp.kron(out2, Gates.__id(i-j-1))
-            out2 = sp.kron(out2, Gates.__proj1)
-            out2 = sp.kron(out2, Gates.__id(self.qnum-i-1))
+            out2 = kr(Gates.__id(j), Gates.__x)
+            out2 = kr(out2, Gates.__id(i-j-1))
+            out2 = kr(out2, Gates.__proj1)
+            out2 = kr(out2, Gates.__id(self.qnum-i-1))
         else:
             raise ValueError('Invalid CNOT indecies {} and {}, for {} qubits.'.format(i, j, self.qnum))
         return (out1 + out2).asformat('csr')
-
 
 class Observable:
     def __init__(self, qubit_number, observable):
@@ -222,10 +236,11 @@ class Observable:
             for i in range(self.qnum):
                 for j in range(i+1):
                     if observable['zz'][i, j] != None:
-                        raise ValueError(
-'zz of observable should be a upper triangular {} by {} matrix. Diagonal and lower \
-triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observable['zz'][i, j])
-                        )
+                        raise ValueError((
+                            'zz of observable should be a upper triangular {} '.format(self.qnum),
+                            'by {} matrix. Diagonal and lower triangle should'.format(self.qnum),
+                            'contain None\'s, not {}.'.format(observable['zz'][i, j])
+                        ))
                 for j in range(i+1, self.qnum):
                     if observable['zz'][i, j] != None:
                         Observable.__weight_check(observable['zz'][i, j], 'y')
@@ -282,8 +297,9 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
         self.projector_weights = np.array(projector_weights)
         self.has_loaded_projectors = True
 
-    def to_gate(self):
+    def classical_to_gate(self):
         # make sure observable only contains z and zz
+        kr = np.kron # we operate on dense 1-d vectors
         self.__check_observable(
             known_keys=['z', 'zz'],
             warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted.'
@@ -291,17 +307,31 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
         # build gate
         z = np.array([1., -1.])
         id = lambda i: np.full(2**i, 1.)
-        if 'z' in observable:
-            for i, weight in enumerate(observable['z']):
+        gate = id(self.qnum)
+        if 'z' in self.info:
+            for i, weight in enumerate(self.info['z']):
                 if weight != None:
-                    pass
-        if 'zz' in observable:
+                    gate += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
+        if 'zz' in self.info:
             for i in range(self.qnum):
                 for j in range(i+1, self.qnum):
-                    if observable['zz'][i, j] != None:
-                        pass
-        ########## UNFINISHED
-        return None
+                    if self.info['zz'][i, j] != None:
+                        gate += self.info['zz'][i, j] * kr(
+                            id(i),
+                            kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
+                        )
+        unique = np.unique(gate)
+        if len(unique) > self.qnum**2:
+            warnings.warn((
+                'Observable contains many terms, gate decomposition might be ',
+                'inefficient. {} different eigenvalues'.format(len(unique))
+            ))
+        gate_components = np.ndarray([len(unique), 2**self.qnum], dtype='complex')
+        gate_weights = np.ndarray(len(unique), dtype='complex')
+        for i, weight in enumerate(unique):
+            gate_components[i] = (gate == weight) # binary string
+            gate_weights[i] = weight
+        return gate_weights, gate_components
 
     def __check_observable(self, known_keys, warning=None):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''
@@ -318,7 +348,7 @@ triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observabl
 
     def __weight_check(weight, observable_component):
         if abs(weight) < 10.**-15:
-            warnings.warn(
-'Weight in observable {} is zero or almost zero. If you dont\'t want to include it, set it to None.' \
-.format(observable_component)
-            )
+            warnings.warn((
+                'Weight in observable {} is zero or almost zero.'.format(observable_component),
+                ' If you dont\'t want to include it, set it to None.'
+            ))
