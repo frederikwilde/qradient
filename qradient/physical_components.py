@@ -53,7 +53,7 @@ class State:
 
     def classical_ham(self, angle):
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
-        self.vec *= np.exp(-1.j * angle * gate)
+        self.vec *= np.exp(-1.j * angle * self.gates.classical_ham)
 
     def custom_gate(self, key):
         self.vec = self.gates.custom[key].dot(self.vec)
