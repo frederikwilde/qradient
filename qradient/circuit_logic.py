@@ -1,4 +1,4 @@
-from qradient.physical_components import Gates, State
+from qradient.physical_components import Gates, State, Observable
 import numpy as np
 import scipy.sparse as sp
 from scipy import stats
@@ -11,129 +11,32 @@ class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
     def init(self, qubit_number, observable):
         self.qnum = qubit_number
-        self.load_observable(observable)
         self.state = State(qubit_number) # gates must be added by particular child class
+        self.observable = Observable(qubit_number, observable)
         self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
         # FLAGS
         self.has_loaded_projectors = False
 
-    def expec_val(self):
-        return self.state.vec.conj().dot(
-            self.observable_mat.dot(self.state.vec)
-        ).real
-
     def load_observable(self, observable):
-        '''Takes a dictionary specifying the observable and builds the matrix.
-
-        Args:
-            observable (dict): can contain the following fields:
-                'x': a 1d-array of prefactors for single-qubit Pauli X. Choose None
-                    for no matrix.
-                'y': 1d-array for Pauli Y.
-                'z': 1d-array for Pauli Z.
-                'zz': a 2d-array as upper triangular matrix for two-qubit ZZ terms.
-        '''
-        self.observable = observable
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
-        self.observable_mat = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
-        x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
-        y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
-        z = sp.csr_matrix([[1., 0.], [0., -1.]], dtype='complex')
-        if 'x' in observable:
-            for i, weight in enumerate(observable['x']):
-                if weight != None:
-                    op = kr(kr(sp.identity(2**i), x), sp.identity(2**(self.qnum-i-1)))
-                    self.observable_mat += weight * op
-        if 'y' in observable:
-            for i, weight in enumerate(observable['y']):
-                if weight != None:
-                    op = kr(kr(sp.identity(2**i), y), sp.identity(2**(self.qnum-i-1)))
-                    self.observable_mat += weight * op
-        if 'z' in observable:
-            for i, weight in enumerate(observable['z']):
-                if weight != None:
-                    op = kr(kr(sp.identity(2**i), z), sp.identity(2**(self.qnum-i-1)))
-                    self.observable_mat += weight * op
-        if 'zz' in observable:
-            for i in range(self.qnum):
-                for j in range(i+1):
-                    if observable['zz'][i, j] != None:
-                        raise ValueError(
-'zz of observable should be a upper triangular {} by {} matrix. Diagonal and lower \
-triangle should contain None\'s, not {}.'.format(self.qnum, self.qnum, observable['zz'][i, j])
-                        )
-                for j in range(i+1, self.qnum):
-                    if observable['zz'][i, j] != None:
-                        op = kr(kr(sp.identity(2**i), z), sp.identity(2**(j-i-1)))
-                        op = kr(kr(op, z), sp.identity(2**(self.qnum-j-1)))
-                        self.observable_mat += observable['zz'][i, j] * op
+        '''For loading a new observable'''
+        self.observable = Observable(self.qnum, observable)
         self.has_loaded_projectors = False
 
-    def check_observable(self, known_keys):
-        '''Tests whether observable only contains known keys and throws a warning otherwise.'''
-        for key in list(self.observable.keys()):
-            unknown = True
-            for k in known_keys:
-                if key == k:
-                    unknown = False
-            if unknown:
-                warnings.warn('Unknown element of observable {} will be ignored.'.format(key))
+    def expec_val(self):
+        return self.state.vec.conj().dot(
+            self.observable.matrix.dot(self.state.vec)
+        ).real
 
-    def __load_projectors(self):
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
-        # construct pauli projectors
-        projectors = []
-        projector_weights = []
-        x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
-        y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
-        z_proj_pos = sp.csr_matrix([[1., 0.], [0., 0.]], dtype='complex') # projects on the +1 subspace
-        z_proj_neg = sp.csr_matrix([[0., 0.], [0., 1.]], dtype='complex') # projects on the -1 subspace
-        # read the content of observable
-        x = self.observable.get('x', np.full(self.qnum, None))
-        y = self.observable.get('y', np.full(self.qnum, None))
-        z = self.observable.get('z', np.full(self.qnum, None))
-        zz = self.observable.get('zz', np.full([self.qnum, self.qnum], None))
-        for i in range(self.qnum):
-            id1 = sp.identity(2**i, dtype='complex')
-            id2 = sp.identity(2**(self.qnum-i-1), dtype='complex')
-            if x[i] != None:
-                projectors.append(kr(id1, kr(x_proj_pos, id2), format='csr'))
-                projector_weights.append(x[i])
-            if y[i] != None:
-                projectors.append(kr(id1, kr(y_proj_pos, id2), format='csr'))
-                projector_weights.append(y[i])
-            if z[i] != None:
-                projectors.append(sp.diags(self.state.gates.zrot_pos[i], format='csr'))
-                projector_weights.append(z[i])
-            for j in range(i+1, self.qnum):
-                if zz[i, j] != None:
-                    id3 = sp.identity(2**(j-i-1), dtype='complex')
-                    id4 = sp.identity(2**(self.qnum-j-1), dtype='complex')
-                    upup = kr(
-                        id1,
-                        kr(z_proj_pos, kr(id3, kr(z_proj_pos, id4))),
-                        format='csr'
-                    )
-                    downdown = kr(
-                        id1,
-                        kr(z_proj_neg, kr(id3, kr(z_proj_neg, id4))),
-                        format='csr'
-                    )
-                    projectors.append(upup + downdown)
-                    projector_weights.append(zz[i, j])
-            self.projectors = np.array(projectors)
-            self.projector_weights = np.array(projector_weights)
-
-    def __sample_expec_val(self, shot_num):
+    def sample_expec_val(self, shot_num):
         if not self.has_loaded_projectors:
-            self.__load_projectors()
+            self.observable.load_projectors()
             self.has_loaded_projectors = True
         self.tmp_vec = self.state.vec # for resetting
         expec_val = 0.
-        for i, op in np.ndenumerate(self.projectors):
+        for i, op in np.ndenumerate(self.observable.projectors):
             self.state.multiply_matrix(op)
             prob = (np.abs(self.state.vec)**2).sum()
-            weight = self.projector_weights[i]
+            weight = self.observable.projector_weights[i]
             rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
             expec_val += rnd_var.rvs(size=shot_num).mean()
             self.state.vec = self.tmp_vec
@@ -161,7 +64,8 @@ class McClean(ParametrizedCircuit):
         ParametrizedCircuit.load_observable(self, observable)
         self.has_loaded_eigensystem = False
 
-    def run_expec_val(self, hide_progbar=True, ini_state=None):
+    def run_expec_val(self, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
+        '''Runs the circuit and returns the expectation value under observable'''
         if ini_state is None:
             self.state.reset()
         else:
@@ -178,7 +82,10 @@ class McClean(ParametrizedCircuit):
             self.state.cnot_ladder(0)
             for q in qrange:
                 self.__rot(i, q)
-        return self.expec_val()
+        if exact_expec_val:
+            return self.expec_val()
+        else:
+            return self.sample_expec_val(shot_num)
 
     def grad_run(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
@@ -201,7 +108,7 @@ class McClean(ParametrizedCircuit):
                 self.__rot(i, q)
         self.state_history[self.lnum] = self.state.vec
         # calculate expecation value
-        self.state.multiply_matrix(self.observable_mat)
+        self.state.multiply_matrix(self.observable.matrix)
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
         # calculate gradient
         for i in rng(self.lnum-1, -1, -1):
@@ -237,11 +144,11 @@ class McClean(ParametrizedCircuit):
             self.state_history[i] = self.state.vec
         # calculate gradient
         if exact_expec_val:
-            self.state.multiply_matrix(self.observable_mat)
+            self.state.multiply_matrix(self.observable.matrix)
             expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
             self.state.vec = self.state_history[self.lnum-1]
         else:
-            expec_val = self.__sample_expec_val(shot_num)
+            expec_val = self.sample_expec_val(shot_num)
         # run circuit again with parameter shifts
         for i in rng(self.lnum):
             for dq in qrange:
@@ -251,14 +158,14 @@ class McClean(ParametrizedCircuit):
                     self.state.cnot_ladder(0)
                     for q in qrange:
                         self.__rot(j, q)
-                o_plus = self.__sample_expec_val(shot_num)
+                o_plus = self.sample_expec_val(shot_num)
                 self.state.vec = self.state_history[i]
                 self.__manual_rot(i, dq, -np.pi/2)
                 for j in np.arange(i+1, self.lnum):
                     self.state.cnot_ladder(0)
                     for q in qrange:
                         self.__rot(j, q)
-                o_minus = self.__sample_expec_val(shot_num)
+                o_minus = self.sample_expec_val(shot_num)
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
@@ -273,7 +180,7 @@ class McClean(ParametrizedCircuit):
         '''
         # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
         if not self.has_loaded_eigensystem:
-            self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable_mat.asformat('array'))
+            self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable.matrix.asformat('array'))
             self.lhs = McClean.LeftHandSide(eigenvectors.transpose(), self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
             self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
@@ -298,13 +205,11 @@ class McClean(ParametrizedCircuit):
                 self.__rot(i, q)
             self.state_history[i] = self.state.vec
         # calculate expectation value
-        self.state.multiply_matrix(self.observable_mat)
-        expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
         if exact_expec_val:
-            self.state.multiply_matrix(self.observable_mat)
+            self.state.multiply_matrix(self.observable.matrix)
             expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
         else:
-            expec_val = self.__sample_expec_val(shot_num)
+            expec_val = self.sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.reset()
         for i in rng(self.lnum-1): # we don't need the last one
@@ -411,11 +316,9 @@ class McClean(ParametrizedCircuit):
         for i in rng(self.lnum):
             for q in qrange:
                 self.angles[i, q] += eps
-                self.run()
-                e2 = self.expec_val()
+                e2 = self.run_expec_val()
                 self.angles[i, q] -= 2*eps
-                self.run()
-                e1 = self.expec_val()
+                e1 = self.run_expec_val()
                 self.angles[i, q] += eps
                 grad[i, q] = np.real(e2 - e1) / (2.*eps)
         return grad
@@ -489,7 +392,7 @@ class MeynardClassifier(ParametrizedCircuit):
             self.state.cnot_ladder(0)
         self.state_history[2*self.dlnum + 3*self.clnum] = self.state.vec # save final state
         # calculate expectation value
-        self.state.multiply_matrix(self.observable_mat)
+        self.state.multiply_matrix(self.observable.matrix)
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
         # calculate gradient
         # classifier layer
@@ -557,10 +460,6 @@ class Qaoa(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number):
         ParametrizedCircuit.init(self, qubit_number, observable)
         self.lnum = layer_number
-        # load gates
-        self.state.gates = Gates(self.qnum) \
-            .add_xrots() \
-            .add_zrots() \
         self.state.reset('+') # initialize in uniform-superposition state
         # for calculating the gradient
         self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
@@ -570,6 +469,7 @@ class Qaoa(ParametrizedCircuit):
     def load_observable(self, observable):
         ParametrizedCircuit.load_observable(self, observable)
         self.has_loaded_eigensystem = False
+        #### load new Hamiltonian gate
 
     def grad_run(self, betas, gammas, hide_progbar=True):
         pass
