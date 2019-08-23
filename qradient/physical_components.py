@@ -53,11 +53,12 @@ class State:
 
     def classical_ham(self, angle):
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
-        gate = np.zeros(2**self.qnum, dtype='complex')
-        for i in np.arange(len(self.gates.classical_ham_weights)):
-            gate += np.exp(-1.j * angle * self.gates.classical_ham_weights[i]) * \
-                self.gates.classical_ham_components[i]
-        self.vec *= gate
+        # gate = np.zeros(2**self.qnum, dtype='complex')
+        # for i in np.arange(len(self.gates.classical_ham_weights)):
+        #     gate += np.exp(-1.j * angle * self.gates.classical_ham_weights[i]) * \
+        #         self.gates.classical_ham_components[i]
+        # self.vec *= gate
+        self.vec *= np.exp(-1.j * angle * gate)
 
     def custom_gate(self, key):
         self.vec = self.gates.custom[key].dot(self.vec)
@@ -174,8 +175,7 @@ class Gates:
         return self
 
     def add_classical_ham(self, classical_ham):
-        self.classical_ham_weights = classical_ham[0]
-        self.classical_ham_components = classical_ham[1]
+        self.classical_ham = classical_ham
         return self
 
     def __cnot(self, i, j):
@@ -320,18 +320,20 @@ class Observable:
                             id(i),
                             kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
                         )
-        unique = np.unique(gate)
-        if len(unique) > self.qnum**2:
-            warnings.warn((
-                'Observable contains many terms, gate decomposition might be ',
-                'inefficient. {} different eigenvalues'.format(len(unique))
-            ))
-        gate_components = np.ndarray([len(unique), 2**self.qnum], dtype='complex')
-        gate_weights = np.ndarray(len(unique), dtype='complex')
-        for i, weight in enumerate(unique):
-            gate_components[i] = (gate == weight) # binary string
-            gate_weights[i] = weight
-        return gate_weights, gate_components
+        ### it turns out that decomposing is less efficient than calculating np.exp(gate), maybe with good compiling
+        # unique = np.unique(gate)
+        # if len(unique) > self.qnum**2:
+        #     warnings.warn((
+        #         'Observable contains many terms, gate decomposition might be ',
+        #         'inefficient. {} different eigenvalues'.format(len(unique))
+        #     ))
+        # gate_components = np.ndarray([len(unique), 2**self.qnum], dtype='complex')
+        # gate_weights = np.ndarray(len(unique), dtype='complex')
+        # for i, weight in enumerate(unique):
+        #     gate_components[i] = (gate == weight) # binary string
+        #     gate_weights[i] = weight
+        # return gate_weights, gate_components
+        return gate
 
     def __check_observable(self, known_keys, warning=None):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''
