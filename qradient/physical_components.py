@@ -307,7 +307,7 @@ class Observable:
         # build gate
         z = np.array([1., -1.])
         id = lambda i: np.full(2**i, 1.)
-        gate = id(self.qnum)
+        gate = np.zeros(2**self.qnum, dtype='double')
         if 'z' in self.info:
             for i, weight in enumerate(self.info['z']):
                 if weight != None:
