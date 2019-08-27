@@ -6,6 +6,9 @@ from tqdm import tqdm_notebook, tnrange
 import warnings
 
 def progbar_range(hide_progbar):
+    '''Reduces code by returning a regular range or a tnrange.
+
+    A tnrange displays a progress bar while executing.'''
     if hide_progbar:
         return np.arange
     else:
@@ -489,7 +492,7 @@ class Qaoa(ParametrizedCircuit):
             self.__xrot_all(betas[i])
         self.state_history[2*self.lnum] = self.state.vec
         # calculate expecation value
-        self.state.multiply_matrix(self.observable.matrix)
+        self.state.vec *= self.state.gates.classical_ham
         expec_val = self.state_history[2*self.lnum].conj().dot(self.state.vec).real
         # calculate gradient
         for i in range(self.lnum-1, -1, -1):
@@ -527,9 +530,12 @@ class Qaoa(ParametrizedCircuit):
     ):
         # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
         if not self.has_loaded_eigensystem:
-            self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable.matrix.asformat('array'))
-            self.lhs = Qaoa.LeftHandSide(eigenvectors.transpose(), self.state.gates)
-            self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.eigenvalues = self.state.gates.classical_ham
+            self.lhs = Qaoa.LeftHandSide(
+                sp.identity(2**self.qnum, dtype='complex', format='csr'),
+                self.state.gates
+            )
+            self.lhs_history = np.ndarray([2*self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
             self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
             self.has_loaded_eigensystem = True
         # prepare to run circuit
@@ -537,52 +543,59 @@ class Qaoa(ParametrizedCircuit):
             self.state.reset()
         else:
             self.state.vec = ini_state
-        qrange = np.arange(self.qnum)
-        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
+        grad = np.ndarray([self.lnum, 2], dtype='double')
         # run circuit
-        for q in qrange:
-            self.state.yrot(np.pi/4., q)
         range = progbar_range(hide_progbar)
         for i in range(self.lnum):
-            self.state.cnot_ladder(0)
-            for q in qrange:
-                self.__rot(i, q)
-            self.state_history[i] = self.state.vec
+            self.state_history[2*i] = self.state.vec
+            self.state.exp_ham_classical(gammas[i])
+            self.state_history[2*i+1] = self.state.vec
+            self.__xrot_all(betas[i])
+        self.state_history[2*self.lnum] = self.state.vec
         # calculate expectation value
         if exact_expec_val:
-            self.state.multiply_matrix(self.observable.matrix)
-            expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
+            self.state.vec *= self.state.gates.classical_ham
+            expec_val = self.state_history[2*self.lnum].conj().dot(self.state.vec).real
         else:
             expec_val = self.sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.reset()
-        for i in range(self.lnum-1): # we don't need the last one
+        for i in range(self.lnum):
             i_inv = self.lnum - i - 1
-            for q in qrange:
-                ax, angle = self.axes[i_inv, q], self.angles[i_inv, q]
-                self.lhs.rot(ax, angle, q)
-            self.lhs.cnot_ladder()
-            # Since the lhs matrix is dense after a few layers, we store it dense,
-            # but keep it in sparse format for multiplication with sparse gates.
-            self.lhs_history[i+1] = self.lhs.matrix.asformat('array')
+            self.lhs.xrot_all(betas[i_inv])
+            self.lhs_history[2*i] = self.lhs.matrix.asformat('array')
+            self.lhs.exp_ham_classical(gammas[i_inv])
+            self.lhs_history[2*i+1] = self.lhs.matrix.asformat('array')
         # calculate gradient finite-shot measurements
         for i in range(self.lnum):
-            self.state.vec = self.state_history[i]
-            for q in qrange:
-                self.__manual_rot(i, q, np.pi/2)
-                dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
-                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
-                sample1 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
-                self.__manual_rot(i, q, -np.pi)
-                dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
-                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
-                sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
-                self.state.vec = self.state_history[i]
-                grad[i, q] = (sample1 - sample2)/2.
+            # gamma[i]
+            self.state.vec[:] = self.state_history[2*i]
+            self.state.exp_ham_classical(gammas[i] + np.pi/2)
+            dist = np.abs(self.lhs_history[2 * (self.lnum-i-1)].dot(self.state.vec))**2
+            rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+            sample1 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+            self.state.vec[:] = self.state_history[2*i]
+            self.state.exp_ham_classical(gammas[i] - np.pi/2)
+            dist = np.abs(self.lhs_history[2 * (self.lnum-i-1)].dot(self.state.vec))**2
+            rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+            sample1 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+            grad[i, 0] = (sample1 - sample2)/2.
+            # beta[i]
+            self.state.vec[:] = self.state_history[2*i+1]
+            self.__xrot_all(betas[i] + np.pi/2)
+            dist = np.abs(self.lhs_history[2 * (self.lnum-i-1) + 1].dot(self.state.vec))**2
+            rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+            sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+            self.state.vec[:] = self.state_history[2*i+1]
+            self.__xrot_all(betas[i] - np.pi/2)
+            dist = np.abs(self.lhs_history[2 * (self.lnum-i-1) + 1].dot(self.state.vec))**2
+            rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+            sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+            grad[i, 1] = (sample1 - sample2)/2.
         return expec_val, grad
 
     class LeftHandSide:
-        '''A helper class for sample_grad_observable.'''
+        '''A helper class for sample_grad_dense.'''
         def __init__(self, matrix, gates):
             # the matrix itself quickly becomes dense, but multiplication with sparse
             # gates is still more efficient with sparse method.
@@ -590,24 +603,10 @@ class Qaoa(ParametrizedCircuit):
             self.matrix = self.ini_matrix
             self.gates = gates
             self.id = sp.identity(2**gates.qnum, dtype='complex', format='csr')
-        def rot(self, axis, angle, q):
-            if axis == 0:
-                self.matrix = self.matrix.dot(
-                    np.sin(.5*angle) * self.gates.xrot[q] + np.cos(.5*angle) * self.id
-                )
-            elif axis == 1:
-                self.matrix = self.matrix.dot(
-                    np.sin(.5*angle) * self.gates.yrot[q] + np.cos(.5*angle) * self.id
-                )
-            elif axis == 2:
-                self.matrix = self.matrix.dot(
-                    np.exp(-.5j*angle) * sp.diags(self.gates.zrot_pos[q]) + \
-                        np.exp(.5j*angle) * sp.diags(self.gates.zrot_neg[q])
-                )
-            else:
-                raise ValueError('Invalid axis {}'.format(axis))
-        def cnot_ladder(self):
-            self.matrix = self.matrix.dot(self.gates.cnot_ladder[0])
+        def exp_ham_classical(self):
+            pass
+        def xrot_all(self):
+            pass
         def reset(self):
             self.matrix = self.ini_matrix
     # end LeftHandSide
