@@ -5,6 +5,12 @@ from scipy import stats
 from tqdm import tqdm_notebook, tnrange
 import warnings
 
+def progbar_range(hide_progbar):
+    if hide_progbar:
+        return np.arange
+    else:
+        return tnrange
+
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
     def init(self, qubit_number, observable):
@@ -29,7 +35,7 @@ class ParametrizedCircuit:
         if not self.has_loaded_projectors:
             self.observable.load_projectors()
             self.has_loaded_projectors = True
-        self.tmp_vec = self.state.vec # for resetting
+        self.tmp_vec[:] = self.state.vec # for resetting
         expec_val = 0.
         for i, op in np.ndenumerate(self.observable.projectors):
             self.state.multiply_matrix(op)
@@ -37,7 +43,7 @@ class ParametrizedCircuit:
             weight = self.observable.projector_weights[i]
             rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
             expec_val += rnd_var.rvs(size=shot_num).mean()
-            self.state.vec = self.tmp_vec
+            self.state.vec[:] = self.tmp_vec
         return expec_val
 
 class McClean(ParametrizedCircuit):
@@ -72,11 +78,8 @@ class McClean(ParametrizedCircuit):
         # run circuit
         for q in qrange:
             self.state.yrot(np.pi/4., q)
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
-        for i in rng(self.lnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
             self.state.cnot_ladder(0)
             for q in qrange:
                 self.__rot(i, q)
@@ -95,11 +98,8 @@ class McClean(ParametrizedCircuit):
         # run circuit
         for q in qrange:
             self.state.yrot(np.pi/4., q)
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
-        for i in rng(self.lnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
             self.state.cnot_ladder(0)
             self.state_history[i] = self.state.vec
             for q in qrange:
@@ -109,15 +109,15 @@ class McClean(ParametrizedCircuit):
         self.state.multiply_matrix(self.observable.matrix)
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
         # calculate gradient
-        for i in rng(self.lnum-1, -1, -1):
+        for i in range(self.lnum-1, -1, -1):
             for q in qrange:
                 self.__rot(i, q, angle_sign=-1.)
-            self.tmp_vec = self.state.vec
+            self.tmp_vec[:] = self.state.vec
             for q in qrange:
                 self.__rot(i, q)
                 self.__drot(i, q, angle_sign=-1.)
                 grad[i, q] = -2. * self.state_history[i].conj().dot(self.state.vec).real # -1 due to dagger of derivative
-                self.state.vec = self.tmp_vec
+                self.state.vec[:] = self.tmp_vec
             self.state.cnot_ladder(1)
         return expec_val, grad
 
@@ -131,24 +131,19 @@ class McClean(ParametrizedCircuit):
         # run circuit
         for q in qrange:
             self.state.yrot(np.pi/4., q)
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
-        for i in rng(self.lnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
             self.state.cnot_ladder(0)
             for q in qrange:
                 self.__rot(i, q)
             self.state_history[i] = self.state.vec
         # calculate gradient
         if exact_expec_val:
-            self.state.multiply_matrix(self.observable.matrix)
-            expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
-            self.state.vec = self.state_history[self.lnum-1]
+            expec_val = self.expec_val()
         else:
             expec_val = self.sample_expec_val(shot_num)
         # run circuit again with parameter shifts
-        for i in rng(self.lnum):
+        for i in range(self.lnum):
             for dq in qrange:
                 self.state.vec = self.state_history[i]
                 self.__manual_rot(i, dq, np.pi/2)
@@ -193,24 +188,20 @@ class McClean(ParametrizedCircuit):
         # run circuit
         for q in qrange:
             self.state.yrot(np.pi/4., q)
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
-        for i in rng(self.lnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
             self.state.cnot_ladder(0)
             for q in qrange:
                 self.__rot(i, q)
             self.state_history[i] = self.state.vec
         # calculate expectation value
         if exact_expec_val:
-            self.state.multiply_matrix(self.observable.matrix)
-            expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
+            expec_val = self.expec_val()
         else:
             expec_val = self.sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.reset()
-        for i in rng(self.lnum-1): # we don't need the last one
+        for i in range(self.lnum-1): # we don't need the last one
             i_inv = self.lnum - i - 1
             for q in qrange:
                 ax, angle = self.axes[i_inv, q], self.angles[i_inv, q]
@@ -220,7 +211,7 @@ class McClean(ParametrizedCircuit):
             # but keep it in sparse format for multiplication with sparse gates.
             self.lhs_history[i+1] = self.lhs.matrix.asformat('array')
         # calculate gradient finite-shot measurements
-        for i in rng(self.lnum):
+        for i in range(self.lnum):
             self.state.vec = self.state_history[i]
             for q in qrange:
                 self.__manual_rot(i, q, np.pi/2)
@@ -306,12 +297,9 @@ class McClean(ParametrizedCircuit):
         warnings.warn('This function is very inefficient, use grad_run instead.')
         grad = np.ndarray([self.lnum, self.qnum], dtype='double')
         eps = 10.**-8
-        if hide_progbar:
-            rng = range
-        else:
-            rng = tnrange
+        range = progbar_range(hide_progbar)
         qrange = np.arange(self.qnum)
-        for i in rng(self.lnum):
+        for i in range(self.lnum):
             for q in qrange:
                 self.angles[i, q] += eps
                 e2 = self.run_expec_val()
@@ -340,17 +328,14 @@ class MeynardClassifier(ParametrizedCircuit):
     def run(self, data, encoding_parameters, classification_parameters, hide_progbar=True):
         self.state.reset()
         qrange = np.arange(self.qnum)
-        if hide_progbar:
-            rng = range
-        else:
-            rng = tnrange
-        for i in rng(self.dlnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.dlnum):
             for q in qrange:
                 self.state.xrot(data[i, q], q)
                 self.state.yrot(encoding_parameters[i, q, 0], q)
                 self.state.zrot(encoding_parameters[i, q, 1], q)
             self.state.cnot_ladder(0)
-        for i in rng(self.clnum):
+        for i in range(self.clnum):
             for q in qrange:
                 self.state.xrot(classification_parameters[i, q, 0], q)
                 self.state.yrot(classification_parameters[i, q, 1], q)
@@ -363,11 +348,8 @@ class MeynardClassifier(ParametrizedCircuit):
         encoding_grad = np.ndarray([self.dlnum, self.qnum, 2], dtype='double')
         classification_grad = np.ndarray([self.clnum, self.qnum, 3], dtype='double')
         # run circuit
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
-        for i in rng(self.dlnum):
+        range = progbar_range(hide_progbar)
+        for i in range(self.dlnum):
             for q in qrange:
                 self.state.xrot(data[i, q], q)
             self.state_history[2*i] = self.state.vec # save state
@@ -377,7 +359,7 @@ class MeynardClassifier(ParametrizedCircuit):
             for q in qrange:
                 self.state.zrot(encoding_parameters[i, q, 1], q)
             self.state.cnot_ladder(0)
-        for i in rng(self.clnum):
+        for i in range(self.clnum):
             self.state_history[3*i + 2*self.dlnum] = self.state.vec # save state
             for q in qrange:
                 self.state.xrot(classification_parameters[i, q, 0], q)
@@ -394,7 +376,7 @@ class MeynardClassifier(ParametrizedCircuit):
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
         # calculate gradient
         # classifier layer
-        for i in rng(self.clnum-1, -1, -1):
+        for i in range(self.clnum-1, -1, -1):
             self.state.cnot_ladder(1)
             # Z
             for q in qrange:
@@ -427,7 +409,7 @@ class MeynardClassifier(ParametrizedCircuit):
                     .conj().dot(self.state.vec).real
                 self.state.vec = self.tmp_vec
         # data encoding layer
-        for i in rng(self.dlnum-1, -1, -1):
+        for i in range(self.dlnum-1, -1, -1):
             self.state.cnot_ladder(1)
             # Z
             for q in qrange:
@@ -459,11 +441,12 @@ class Qaoa(ParametrizedCircuit):
         ParametrizedCircuit.init(self, qubit_number, observable)
         self.state.gates = Gates(qubit_number) \
             .add_xrots() \
-            .add_classical_ham(self.observable.classical_to_gate())
+            .add_x_summed() \
+            .add_classical_ham(self.observable.to_vec())
         self.lnum = layer_number
         self.state.reset('+') # initialize in uniform-superposition state
         # for calculating the gradient
-        self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
+        self.state_history = np.ndarray([2*self.lnum+1, 2**self.qnum], dtype='complex')
         # FLAGS
         self.has_loaded_eigensystem = False
 
@@ -471,7 +454,7 @@ class Qaoa(ParametrizedCircuit):
         ParametrizedCircuit.load_observable(self, observable)
         self.has_loaded_eigensystem = False
         # Hamiltonian gate components
-        self.state.gates.add_classical_ham(self.observable.classical_to_gate())
+        self.state.gates.add_classical_ham(self.observable.to_vec())
 
     def run_expec_val(self, betas, gammas, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
         '''Runs the circuit and returns the expectation value under observable'''
@@ -480,34 +463,161 @@ class Qaoa(ParametrizedCircuit):
         else:
             self.state.vec = ini_state
         self.__check_parameters(betas, gammas)
-        if hide_progbar:
-            rng = np.arange
-        else:
-            rng = tnrange
+        range = progbar_range(hide_progbar)
         # run circuit
-        for i in rng(self.lnum):
-            self.state.classical_ham(gammas[i])
-            self.__xfield(betas[i])
+        for i in range(self.lnum):
+            self.state.exp_ham_classical(gammas[i])
+            self.__xrot_all(betas[i])
         if exact_expec_val:
             return self.expec_val()
         else:
             return self.sample_expec_val(shot_num)
 
-    def grad_run(self, betas, gammas, hide_progbar=True):
-        pass
+    def grad_run(self, betas, gammas, hide_progbar=True, ini_state=None):
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        self.__check_parameters(betas, gammas)
+        grad = np.ndarray([self.lnum, 2], dtype='double')
+        # run circuit
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
+            self.state_history[2*i] = self.state.vec
+            self.state.exp_ham_classical(gammas[i])
+            self.state_history[2*i+1] = self.state.vec
+            self.__xrot_all(betas[i])
+        self.state_history[2*self.lnum] = self.state.vec
+        # calculate expecation value
+        self.state.multiply_matrix(self.observable.matrix)
+        expec_val = self.state_history[2*self.lnum].conj().dot(self.state.vec).real
+        # calculate gradient
+        for i in range(self.lnum-1, -1, -1):
+            self.__xrot_all(-betas[i])
+            self.tmp_vec[:] = self.state.vec
+            self.state.x_summed()
+            grad[i, 0] = -1. * self.state_history[2*i+1].conj().dot(self.state.vec).real # factor of .5 is not contained in gates.x_summed
+            self.state.vec[:] = self.tmp_vec
+            self.state.exp_ham_classical(-gammas[i])
+            self.tmp_vec[:] = self.state.vec
+            self.state.ham_classical()
+            grad[i, 1] = -2. * self.state_history[2*i].conj().dot(self.state.vec).real
+            self.state.vec[:] = self.tmp_vec
+        return expec_val, grad
 
-    def sample_grad(self, betas, gammas, hide_progbar=True):
-        pass
+    def sample_grad(
+        self,
+        betas,
+        gammas,
+        shot_num=1,
+        hide_progbar=True,
+        exact_expec_val=True,
+        ini_state=None
+    ):
+        warnings.warn('Not implemented yet.')
 
-    def sample_grad_dense(self, betas, gammas, hide_progbar=True):
-        pass
+    def sample_grad_dense(
+        self,
+        betas,
+        gammas,
+        shot_num=1,
+        hide_progbar=True,
+        exact_expec_val=True,
+        ini_state=None
+    ):
+        # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
+        if not self.has_loaded_eigensystem:
+            self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable.matrix.asformat('array'))
+            self.lhs = Qaoa.LeftHandSide(eigenvectors.transpose(), self.state.gates)
+            self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
+            self.has_loaded_eigensystem = True
+        # prepare to run circuit
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        qrange = np.arange(self.qnum)
+        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
+        # run circuit
+        for q in qrange:
+            self.state.yrot(np.pi/4., q)
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
+            self.state.cnot_ladder(0)
+            for q in qrange:
+                self.__rot(i, q)
+            self.state_history[i] = self.state.vec
+        # calculate expectation value
+        if exact_expec_val:
+            self.state.multiply_matrix(self.observable.matrix)
+            expec_val = self.state_history[self.lnum-1].conj().dot(self.state.vec).real
+        else:
+            expec_val = self.sample_expec_val(shot_num)
+        # run reverse circuit
+        self.lhs.reset()
+        for i in range(self.lnum-1): # we don't need the last one
+            i_inv = self.lnum - i - 1
+            for q in qrange:
+                ax, angle = self.axes[i_inv, q], self.angles[i_inv, q]
+                self.lhs.rot(ax, angle, q)
+            self.lhs.cnot_ladder()
+            # Since the lhs matrix is dense after a few layers, we store it dense,
+            # but keep it in sparse format for multiplication with sparse gates.
+            self.lhs_history[i+1] = self.lhs.matrix.asformat('array')
+        # calculate gradient finite-shot measurements
+        for i in range(self.lnum):
+            self.state.vec = self.state_history[i]
+            for q in qrange:
+                self.__manual_rot(i, q, np.pi/2)
+                dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
+                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+                sample1 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+                self.__manual_rot(i, q, -np.pi)
+                dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
+                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+                sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+                self.state.vec = self.state_history[i]
+                grad[i, q] = (sample1 - sample2)/2.
+        return expec_val, grad
+
+    class LeftHandSide:
+        '''A helper class for sample_grad_observable.'''
+        def __init__(self, matrix, gates):
+            # the matrix itself quickly becomes dense, but multiplication with sparse
+            # gates is still more efficient with sparse method.
+            self.ini_matrix = sp.csr_matrix(matrix, dtype='complex')
+            self.matrix = self.ini_matrix
+            self.gates = gates
+            self.id = sp.identity(2**gates.qnum, dtype='complex', format='csr')
+        def rot(self, axis, angle, q):
+            if axis == 0:
+                self.matrix = self.matrix.dot(
+                    np.sin(.5*angle) * self.gates.xrot[q] + np.cos(.5*angle) * self.id
+                )
+            elif axis == 1:
+                self.matrix = self.matrix.dot(
+                    np.sin(.5*angle) * self.gates.yrot[q] + np.cos(.5*angle) * self.id
+                )
+            elif axis == 2:
+                self.matrix = self.matrix.dot(
+                    np.exp(-.5j*angle) * sp.diags(self.gates.zrot_pos[q]) + \
+                        np.exp(.5j*angle) * sp.diags(self.gates.zrot_neg[q])
+                )
+            else:
+                raise ValueError('Invalid axis {}'.format(axis))
+        def cnot_ladder(self):
+            self.matrix = self.matrix.dot(self.gates.cnot_ladder[0])
+        def reset(self):
+            self.matrix = self.ini_matrix
+    # end LeftHandSide
 
     def __check_parameters(self, betas, gammas):
-        if (len(betas) != self.lnum) or (len(gammas) != self.lnum):
+        if (betas.size != self.lnum) or (gammas.size != self.lnum):
             raise ValueError((
                 'Wrong amount of parameters. Expected {} and {},'.format(self.lnum, self.lnum),
                 ' found {} and {}.'.format(len(betas), len(gammas))
             ))
-    def __xfield(self, angle):
+    def __xrot_all(self, angle):
         for q in np.arange(self.qnum):
             self.state.xrot(angle, q)

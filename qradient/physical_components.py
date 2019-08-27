@@ -20,6 +20,10 @@ class State:
         self.vec = .5*np.cos(.5*angle) * self.gates.xrot[i].dot(self.vec) - \
             .5*np.sin(.5*angle) * self.vec
 
+    def x_summed(self):
+        '''Multiply the sum of all x-Paulis (incl. -1.j). For derivatives.'''
+        self.vec = self.gates.x_summed.dot(self.vec)
+
     def yrot(self, angle, i):
         self.vec = np.sin(.5*angle) * self.gates.yrot[i].dot(self.vec) + \
             np.cos(.5*angle) * self.vec
@@ -51,9 +55,13 @@ class State:
         '''
         self.vec = self.gates.cnot_ladder[stacking].dot(self.vec)
 
-    def classical_ham(self, angle):
+    def exp_ham_classical(self, angle):
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
         self.vec *= np.exp(-1.j * angle * self.gates.classical_ham)
+
+    def ham_classical(self):
+        '''Multiply a classical Hamiltonian with the state. For derivatives.'''
+        self.vec *= -1.j * self.gates.classical_ham
 
     def custom_gate(self, key):
         self.vec = self.gates.custom[key].dot(self.vec)
@@ -98,6 +106,13 @@ class Gates:
                 Gates.__id(self.qnum-i-1),
                 format='csr'
             )
+        return self
+
+    def add_x_summed(self):
+        '''All x gates summed up. I.e. -1.j * (x_1 + x_2 + ... + x_qnum).'''
+        self.x_summed = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
+        for i in range(self.qnum):
+            self.x_summed += self.xrot[i]
         return self
 
     def add_yrots(self):
@@ -292,30 +307,29 @@ class Observable:
         self.projector_weights = np.array(projector_weights)
         self.has_loaded_projectors = True
 
-    def classical_to_gate(self):
-        # make sure observable only contains z and zz
+    def to_vec(self):
         kr = np.kron # we operate on dense 1-d vectors
         self.__check_observable(
             known_keys=['z', 'zz'],
-            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted.'
+            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted in this method.'
         )
         # build gate
         z = np.array([1., -1.])
         id = lambda i: np.full(2**i, 1.)
-        gate = np.zeros(2**self.qnum, dtype='double')
+        vector = np.zeros(2**self.qnum, dtype='double')
         if 'z' in self.info:
             for i, weight in enumerate(self.info['z']):
                 if weight != None:
-                    gate += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
+                    vector += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
         if 'zz' in self.info:
             for i in range(self.qnum):
                 for j in range(i+1, self.qnum):
                     if self.info['zz'][i, j] != None:
-                        gate += self.info['zz'][i, j] * kr(
+                        vector += self.info['zz'][i, j] * kr(
                             id(i),
                             kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
                         )
-        return gate
+        return vector
 
     def __check_observable(self, known_keys, warning=None):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''

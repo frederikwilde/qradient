@@ -2,15 +2,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MaxCut:
-    def __init__(self, vertex_num, edge_num):
+    def __init__(self, vertex_num, edge_num=None, edge_set=None):
         all_edges = []
         for i in range(vertex_num):
             for j in range(i+1, vertex_num):
                 all_edges.append([i, j])
         self.all_edges = np.array(all_edges)
         self.vertex_num = vertex_num
-        self.edge_num = edge_num
-
+        if edge_set != None:
+            if edge_num != None and edge_num != len(edge_set):
+                raise ValueError('edge_set has length {}, but edge_num was specified as {}.'.format(len(edge_set), edge_num))
+            self.edge_set = edge_set
+            self.edge_num = len(edge_set)
+        elif edge_num != None:
+            self.edge_num = edge_num
+            self.random()
+        else:
+            raise ValueError('Specify either edge_set or edge_num')
+            
     def random(self):
         indeces = np.random.choice(len(self.all_edges), size=self.edge_num, replace=False)
         edge_set = []
@@ -18,7 +27,6 @@ class MaxCut:
             edge = self.all_edges[indeces[i]]
             edge_set.append(edge)
         self.edge_set = np.array(edge_set)
-        return self
 
     def to_observable(self):
         zz = np.full([self.vertex_num, self.vertex_num], None)
