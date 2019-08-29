@@ -47,6 +47,9 @@ class ParametrizedCircuit:
             expec_val += samples.mean()
         return expec_val
 
+    # To do: add here another method which is similar to sample_expec_val, but doesnt loop through all projectors
+    # ideally, this method should just sample the projectors corresponding to a particular observable
+
 class McClean(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number, **kwargs):
         ParametrizedCircuit.init(self, qubit_number, observable)

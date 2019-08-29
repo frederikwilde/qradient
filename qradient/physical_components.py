@@ -286,6 +286,8 @@ class Observable:
                         op = kr(kr(op, z), sp.identity(2**(self.qnum-j-1)))
                         self.matrix += observable['zz'][i, j] * op
 
+    # To do: add option for loading all the components of the observable!
+
     def load_projectors(self):
         if self.has_loaded_projectors: # in case the caller has not checked
             return None
