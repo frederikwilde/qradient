@@ -38,15 +38,13 @@ class ParametrizedCircuit:
         if not self.has_loaded_projectors:
             self.observable.load_projectors()
             self.has_loaded_projectors = True
-        self.tmp_vec[:] = self.state.vec # for resetting
         expec_val = 0.
-        for i, op in np.ndenumerate(self.observable.projectors):
-            self.state.multiply_matrix(op)
-            prob = (np.abs(self.state.vec)**2).sum()
+        for i, proj in np.ndenumerate(self.observable.projectors):
+            prob = (np.abs(proj.dot(self.state.vec))**2).sum()
             weight = self.observable.projector_weights[i]
-            rnd_var = stats.rv_discrete(values=([weight, -weight], [prob, 1-prob]))
-            expec_val += rnd_var.rvs(size=shot_num).mean()
-            self.state.vec[:] = self.tmp_vec
+            rnd_var = stats.rv_discrete(values=([0, 1], [prob, 1-prob]))
+            samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
+            expec_val += samples.mean()
         return expec_val
 
 class McClean(ParametrizedCircuit):
@@ -177,7 +175,7 @@ class McClean(ParametrizedCircuit):
         # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
         if not self.has_loaded_eigensystem:
             self.eigenvalues, eigenvectors = np.linalg.eigh(self.observable.matrix.asformat('array'))
-            self.lhs = McClean.LeftHandSide(eigenvectors.transpose(), self.state.gates)
+            self.lhs = McClean.LeftHandSide(eigenvectors.transpose().conj(), self.state.gates)
             self.lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
             self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
             self.has_loaded_eigensystem = True
@@ -445,7 +443,7 @@ class Qaoa(ParametrizedCircuit):
         self.state.gates = Gates(qubit_number) \
             .add_xrots() \
             .add_x_summed() \
-            .add_classical_ham(self.observable.to_vec())
+            .add_classical_ham(self.observable)
         self.lnum = layer_number
         self.state.reset('+') # initialize in uniform-superposition state
         # for calculating the gradient
@@ -603,9 +601,17 @@ class Qaoa(ParametrizedCircuit):
             self.matrix = self.ini_matrix
             self.gates = gates
             self.id = sp.identity(2**gates.qnum, dtype='complex', format='csr')
-        def exp_ham_classical(self):
+        def exp_ham_classical(self, angle):
+            self.matrix = self.matrix.dot(
+                sp.diags(
+                    np.exp(-1.j * angle * self.gates.classical_ham),
+                    format='csr',
+                    dtype='complex'
+                )
+            )
             pass
         def xrot_all(self):
+            ######### IMPLEMENT
             pass
         def reset(self):
             self.matrix = self.ini_matrix

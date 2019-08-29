@@ -184,9 +184,37 @@ class Gates:
             self.cnot_ladder[1] = self.cnot_ladder[1].dot(cnots[i, (i+1)%self.qnum])
         return self
 
-    def add_classical_ham(self, classical_ham):
-        self.classical_ham = classical_ham
+    def add_classical_ham(self, observable):
+        '''Creates a the full vector representing an observable, that is purely classical.
+
+        Args:
+            observable (Observable): An observable object.
+        '''
+        kr = np.kron # we operate on dense 1-d vectors
+        observable.check_observable(
+            known_keys=['z', 'zz'],
+            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted in this method.'
+        )
+        # build gate
+        z = np.array([1., -1.])
+        id = lambda i: np.full(2**i, 1.)
+        self.classical_ham = np.zeros(2**self.qnum, dtype='double')
+        if 'z' in observable.info:
+            for i, weight in enumerate(self.info['z']):
+                if weight != None:
+                    self.classical_ham += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
+        if 'zz' in observable.info:
+            for i in range(self.qnum):
+                for j in range(i+1, self.qnum):
+                    if observable.info['zz'][i, j] != None:
+                        self.classical_ham += observable.info['zz'][i, j] * kr(
+                            id(i),
+                            kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
+                        )
         return self
+
+    def add_classical_ham_componentwise(self, observable):
+        warnings.warn('Not implemented yet.')
 
     def __cnot(self, i, j):
         '''Controlled NOT gate. First argument is the control qubit.'''
@@ -228,7 +256,7 @@ class Observable:
         self.has_loaded_projectors = False
         # load observable
         self.info = observable
-        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
         self.matrix = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
         y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
@@ -261,77 +289,28 @@ class Observable:
     def load_projectors(self):
         if self.has_loaded_projectors: # in case the caller has not checked
             return None
-        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
         # construct pauli projectors
         projectors = []
         projector_weights = []
-        x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
-        y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
-        z_proj_pos = sp.csr_matrix([[1., 0.], [0., 0.]], dtype='complex') # projects on the +1 subspace
-        z_proj_neg = sp.csr_matrix([[0., 0.], [0., 1.]], dtype='complex') # projects on the -1 subspace
-        gates = Gates(self.qnum).add_zrots() # for the z projectors
-        # read the content of observable
-        x = self.info.get('x', np.full(self.qnum, None))
-        y = self.info.get('y', np.full(self.qnum, None))
-        z = self.info.get('z', np.full(self.qnum, None))
-        zz = self.info.get('zz', np.full([self.qnum, self.qnum], None))
-        for i in range(self.qnum):
-            id1 = sp.identity(2**i, dtype='complex')
-            id2 = sp.identity(2**(self.qnum-i-1), dtype='complex')
-            if x[i] != None:
-                projectors.append(kr(id1, kr(x_proj_pos, id2), format='csr'))
-                projector_weights.append(x[i])
-            if y[i] != None:
-                projectors.append(kr(id1, kr(y_proj_pos, id2), format='csr'))
-                projector_weights.append(y[i])
-            if z[i] != None:
-                projectors.append(sp.diags(gates.zrot_pos[i], format='csr'))
-                projector_weights.append(z[i])
-            for j in range(i+1, self.qnum):
-                if zz[i, j] != None:
-                    id3 = sp.identity(2**(j-i-1), dtype='complex')
-                    id4 = sp.identity(2**(self.qnum-j-1), dtype='complex')
-                    upup = kr(
-                        id1,
-                        kr(z_proj_pos, kr(id3, kr(z_proj_pos, id4))),
-                        format='csr'
-                    )
-                    downdown = kr(
-                        id1,
-                        kr(z_proj_neg, kr(id3, kr(z_proj_neg, id4))),
-                        format='csr'
-                    )
-                    projectors.append(upup + downdown)
-                    projector_weights.append(zz[i, j])
+        Projector.set_qnum(self.qnum)
+        for identifier in ['x', 'y', 'z']:
+            if identifier in self.info:
+                for i in range(self.qnum):
+                    if self.info[identifier][i] != None:
+                        projectors.append(Projector(identifier, i))
+                        projector_weights.append(self.info[identifier][i])
+        if 'zz' in self.info:
+            for i in range(self.qnum):
+                for j in range(self.qnum):
+                    if self.info['zz'][i, j] != None:
+                        projectors.append(Projector('zz', i, j))
+                        projector_weights.append(self.info['zz'][i, j])
         self.projectors = np.array(projectors)
         self.projector_weights = np.array(projector_weights)
         self.has_loaded_projectors = True
 
-    def to_vec(self):
-        kr = np.kron # we operate on dense 1-d vectors
-        self.__check_observable(
-            known_keys=['z', 'zz'],
-            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted in this method.'
-        )
-        # build gate
-        z = np.array([1., -1.])
-        id = lambda i: np.full(2**i, 1.)
-        vector = np.zeros(2**self.qnum, dtype='double')
-        if 'z' in self.info:
-            for i, weight in enumerate(self.info['z']):
-                if weight != None:
-                    vector += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
-        if 'zz' in self.info:
-            for i in range(self.qnum):
-                for j in range(i+1, self.qnum):
-                    if self.info['zz'][i, j] != None:
-                        vector += self.info['zz'][i, j] * kr(
-                            id(i),
-                            kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
-                        )
-        return vector
-
-    def __check_observable(self, known_keys, warning=None):
+    def check_observable(self, known_keys, warning=None):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''
         for key in list(self.info.keys()):
             unknown = True
@@ -350,3 +329,56 @@ class Observable:
                 'Weight in observable {} is zero or almost zero.'.format(observable_component),
                 ' If you dont\'t want to include it, set it to None.'
             ))
+
+class Projector:
+    def __init__(self, key, *args):
+        if key == 'x':
+            self.is_classical = False
+            i = args[0]
+            x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
+            id1 = sp.identity(2**i, dtype='complex')
+            id2 = sp.identity(2**(Projector.qnum-i-1), dtype='complex')
+            self.array = kr(id1, kr(x_proj_pos, id2), format='csr')
+        elif key == 'y':
+            self.is_classical = False
+            i = args[0]
+            y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
+            id1 = sp.identity(2**i, dtype='complex')
+            id2 = sp.identity(2**(Projector.qnum-i-1), dtype='complex')
+            self.array = kr(id1, kr(y_proj_pos, id2), format='csr')
+        elif key == 'z':
+            self.is_classical = True
+            i = args[0]
+            z_proj_pos = np.array([1, 0], dtype='complex') # projects on the +1 subspace
+            id1 = np.ones(2**i, dtype='complex')
+            id2 = np.ones(2**(Projector.qnum-i-1), dtype='complex')
+            self.array = np.kron(id1, np.kron(z_proj_pos, id2))
+        elif key == 'zz':
+            self.is_classical = True
+            i, j = args[0], args[1]
+            z_proj_pos = np.array([1, 0], dtype='complex') # projects on the +1 subspace
+            z_proj_neg = np.array([0, 1], dtype='complex') # projects on the -1 subspace
+            id1 = np.ones(2**i, dtype='complex')
+            id2 = np.ones(2**(Projector.qnum-i-1), dtype='complex')
+            id3 = np.ones(2**(j-i-1), dtype='complex')
+            id4 = np.ones(2**(Projector.qnum-j-1), dtype='complex')
+            upup = np.kron(
+                id1,
+                np.kron(z_proj_pos, np.kron(id3, np.kron(z_proj_pos, id4)))
+            )
+            downdown = np.kron(
+                id1,
+                np.kron(z_proj_neg, np.kron(id3, np.kron(z_proj_neg, id4)))
+            )
+            self.array = upup + downdown
+        else:
+            raise ValueError('Unknown key for projector {}.'.format(key))
+
+    def set_qnum(qnum):
+        Projector.qnum = qnum
+
+    def dot(self, vec):
+        if self.is_classical:
+            return self.array * vec
+        else:
+            return self.array.dot(vec)
