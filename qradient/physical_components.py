@@ -60,7 +60,7 @@ class State:
         self.vec *= np.exp(-1.j * angle * self.gates.classical_ham)
 
     def ham_classical(self):
-        '''Multiply a classical Hamiltonian with the state. For derivatives.'''
+        '''Multiply a classical Hamiltonian (incl. -1.j) with the state. For derivatives.'''
         self.vec *= -1.j * self.gates.classical_ham
 
     def custom_gate(self, key):
@@ -199,22 +199,25 @@ class Gates:
         z = np.array([1., -1.])
         id = lambda i: np.full(2**i, 1.)
         self.classical_ham = np.zeros(2**self.qnum, dtype='double')
+        component_list = []
         if 'z' in observable.info:
             for i, weight in enumerate(self.info['z']):
                 if weight != None:
-                    self.classical_ham += weight * kr(id(i), kr(z, id(self.qnum-i-1)))
+                    component = weight * kr(id(i), kr(z, id(self.qnum-i-1)))
+                    self.classical_ham += component
+                    component_list.append(component)
         if 'zz' in observable.info:
             for i in range(self.qnum):
                 for j in range(i+1, self.qnum):
                     if observable.info['zz'][i, j] != None:
-                        self.classical_ham += observable.info['zz'][i, j] * kr(
+                        component = observable.info['zz'][i, j] * kr(
                             id(i),
                             kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
                         )
+                        self.classical_ham += component
+                        component_list.append(component)
+        self.classical_ham_components = np.array(component_list)
         return self
-
-    def add_classical_ham_componentwise(self, observable):
-        warnings.warn('Not implemented yet.')
 
     def __cnot(self, i, j):
         '''Controlled NOT gate. First argument is the control qubit.'''
