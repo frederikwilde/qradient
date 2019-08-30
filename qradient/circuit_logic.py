@@ -16,17 +16,17 @@ def progbar_range(hide_progbar):
 
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
-    def init(self, qubit_number, observable):
+    def init(self, qubit_number, observable, use_observable_components=False):
         self.qnum = qubit_number
         self.state = State(qubit_number) # gates must be added by particular child class
-        self.observable = Observable(qubit_number, observable)
+        self.observable = Observable(qubit_number, observable, use_observable_components)
         self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
         # FLAGS
         self.has_loaded_projectors = False
 
-    def load_observable(self, observable):
+    def load_observable(self, observable, use_observable_components):
         '''For loading a new observable'''
-        self.observable = Observable(self.qnum, observable)
+        self.observable = Observable(self.qnum, observable, use_observable_components)
         self.has_loaded_projectors = False
 
     def expec_val(self):
@@ -51,8 +51,8 @@ class ParametrizedCircuit:
     # ideally, this method should just sample the projectors corresponding to a particular observable
 
 class McClean(ParametrizedCircuit):
-    def __init__(self, qubit_number, observable, layer_number, **kwargs):
-        ParametrizedCircuit.init(self, qubit_number, observable)
+    def __init__(self, qubit_number, observable, layer_number, use_observable_components=False, **kwargs):
+        ParametrizedCircuit.init(self, qubit_number, observable, use_observable_components)
         self.lnum = layer_number
         # collect kwargs
         self.axes = kwargs.get('axes', (3 * np.random.rand(self.lnum, self.qnum)).astype('int'))
@@ -68,8 +68,8 @@ class McClean(ParametrizedCircuit):
         # FLAGS
         self.has_loaded_eigensystem = False
 
-    def load_observable(self, observable):
-        ParametrizedCircuit.load_observable(self, observable)
+    def load_observable(self, observable, use_observable_components=False):
+        ParametrizedCircuit.load_observable(self, observable, use_observable_components)
         self.has_loaded_eigensystem = False
 
     def run_expec_val(self, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
@@ -109,9 +109,46 @@ class McClean(ParametrizedCircuit):
             for q in qrange:
                 self.__rot(i, q)
         self.state_history[self.lnum] = self.state.vec
-        # calculate expecation value
+        # calculate expectation value wrt to full observable
         self.state.multiply_matrix(self.observable.matrix)
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
+        # calculate gradient
+        for i in range(self.lnum-1, -1, -1):
+            for q in qrange:
+                self.__rot(i, q, angle_sign=-1.)
+            self.tmp_vec[:] = self.state.vec
+            for q in qrange:
+                self.__rot(i, q)
+                self.__drot(i, q, angle_sign=-1.)
+                grad[i, q] = -2. * self.state_history[i].conj().dot(self.state.vec).real # -1 due to dagger of derivative
+                self.state.vec[:] = self.tmp_vec
+            self.state.cnot_ladder(1)
+        return expec_val, grad
+
+    def grad_run_with_observable_component_sampling(self, hide_progbar=True, ini_state=None):
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        qrange = np.arange(self.qnum)
+        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
+        # run circuit
+        for q in qrange:
+            self.state.yrot(np.pi/4., q)
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
+            self.state.cnot_ladder(0)
+            self.state_history[i] = self.state.vec
+            for q in qrange:
+                self.__rot(i, q)
+        self.state_history[self.lnum] = self.state.vec
+        # calculate expectation value wrt to full observable
+        self.state.multiply_matrix(self.observable.matrix)
+        expec_val = self.state_history[-1].conj().dot(self.state.vec).real
+        # adjust state wrt sampled observable component.
+        observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+        self.state.vec = self.state_history[-1]
+        self.state.multiply_matrix(self.observable.component_array[observable_component])
         # calculate gradient
         for i in range(self.lnum-1, -1, -1):
             for q in qrange:

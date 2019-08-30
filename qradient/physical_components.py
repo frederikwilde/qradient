@@ -258,10 +258,10 @@ class Observable:
         self.info = observable
         self.store_components = store_components
         self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
-        self.load_matrix()
+        self.load_matrix(observable)
 
 
-    def load_matrix(self):
+    def load_matrix(self, observable):
         self.matrix = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
         y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
@@ -280,7 +280,7 @@ class Observable:
                         op = kr(kr(sp.identity(2**i), matrix), sp.identity(2**(self.qnum-i-1)))
                         self.matrix += weight * op
                         if self.store_components:
-                            component_list.append(op)
+                            component_list.append(weight * op)
                             component_weights.append(weight)
         # two-qubit components
         if 'zz' in observable:
@@ -299,13 +299,14 @@ class Observable:
                         op = kr(kr(op, z), sp.identity(2**(self.qnum-j-1)))
                         self.matrix += observable['zz'][i, j] * op
                         if self.store_components:
-                            component_list.append(op)
+                            component_list.append(observable['zz'][i, j] * op)
                             component_weights.append(observable['zz'][i, j])
         # store the components and weights as arrays
         if self.store_components:
-            self.weight_normalization = np.sum(component_weights)
+            self.num_components = len(component_weights)
             self.component_array = np.array(component_list)
-            self.component_weights = np.array(component_weights)
+            weight_normalization = np.sum(component_weights)
+            self.weight_distribution = np.array(component_weights)/weight_normalization
 
 
     def load_projectors(self):
