@@ -47,6 +47,19 @@ class ParametrizedCircuit:
             expec_val += samples.mean()
         return expec_val
 
+    def sample_component_expec_val(self, shot_num, component):
+        if not self.has_loaded_projectors:
+            self.observable.load_projectors()
+            self.has_loaded_projectors = True
+        expec_val = 0.
+        proj = self.observable.projectors[component]
+        prob = (np.abs(proj.dot(self.state.vec))**2).sum()
+        weight = self.observable.projector_weights[component]
+        rnd_var = stats.rv_discrete(values=([0, 1], [prob, 1-prob]))
+        samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
+        expec_val += samples.mean()
+        return expec_val
+
     # To do: add here another method which is similar to sample_expec_val, but doesnt loop through all projectors
     # ideally, this method should just sample the projectors corresponding to a particular observable
 
@@ -201,6 +214,48 @@ class McClean(ParametrizedCircuit):
                     for q in qrange:
                         self.__rot(j, q)
                 o_minus = self.sample_expec_val(shot_num)
+                grad[i, dq] = .5 * (o_plus - o_minus)
+        return expec_val, grad
+
+    def sample_grad_with_component_sampling(self, hide_progbar=True, shot_num=1, exact_expec_val=True, ini_state=None):
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        qrange = np.arange(self.qnum)
+        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
+        # run circuit
+        for q in qrange:
+            self.state.yrot(np.pi/4., q)
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
+            self.state.cnot_ladder(0)
+            for q in qrange:
+                self.__rot(i, q)
+            self.state_history[i] = self.state.vec
+        # calculate gradient
+        if exact_expec_val:
+            expec_val = self.expec_val()
+        else:
+            expec_val = self.sample_expec_val(shot_num)
+        # run circuit again with parameter shifts
+        for i in range(self.lnum):
+            for dq in qrange:
+                observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+                self.state.vec = self.state_history[i]
+                self.__manual_rot(i, dq, np.pi/2)
+                for j in np.arange(i+1, self.lnum):
+                    self.state.cnot_ladder(0)
+                    for q in qrange:
+                        self.__rot(j, q)
+                o_plus = self.sample_component_expec_val(shot_num, observable_component)
+                self.state.vec = self.state_history[i]
+                self.__manual_rot(i, dq, -np.pi/2)
+                for j in np.arange(i+1, self.lnum):
+                    self.state.cnot_ladder(0)
+                    for q in qrange:
+                        self.__rot(j, q)
+                o_minus = self.sample_component_expec_val(shot_num, observable_component)
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
