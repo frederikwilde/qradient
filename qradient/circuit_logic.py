@@ -290,7 +290,7 @@ class McClean(ParametrizedCircuit):
                 self.component_lhs.append(lhs)
                 self.component_lhs_history.append(lhs_history)
 
-                self.has_loaded_component_eigensystems = True
+            self.has_loaded_component_eigensystems = True
 
         # Sample a component
         observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
