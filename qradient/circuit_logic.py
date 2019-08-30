@@ -85,6 +85,7 @@ class McClean(ParametrizedCircuit):
     def load_observable(self, observable, use_observable_components=False):
         ParametrizedCircuit.load_observable(self, observable, use_observable_components)
         self.has_loaded_eigensystem = False
+        self.has_loaded_component_eigensystems = False
 
     def run_expec_val(self, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
         '''Runs the circuit and returns the expectation value under observable'''
@@ -139,7 +140,7 @@ class McClean(ParametrizedCircuit):
             self.state.cnot_ladder(1)
         return expec_val, grad
 
-    def grad_run_with_observable_component_sampling(self, hide_progbar=True, ini_state=None):
+    def grad_run_with_component_sampling(self, hide_progbar=True, ini_state=None):
         if ini_state is None:
             self.state.reset()
         else:
@@ -160,7 +161,7 @@ class McClean(ParametrizedCircuit):
         self.state.multiply_matrix(self.observable.matrix)
         expec_val = self.state_history[-1].conj().dot(self.state.vec).real
         # adjust state wrt sampled observable component.
-        observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+        observable_component = np.random.choice(np.arange(self.observable.num_components), p=self.observable.weight_distribution)
         self.state.vec = self.state_history[-1]
         self.state.multiply_matrix(self.observable.component_array[observable_component])
         # calculate gradient
@@ -241,7 +242,7 @@ class McClean(ParametrizedCircuit):
         # run circuit again with parameter shifts
         for i in range(self.lnum):
             for dq in qrange:
-                observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+                observable_component = np.random.choice(np.arange(self.observable.num_components), p=self.observable.weight_distribution)
                 self.state.vec = self.state_history[i]
                 self.__manual_rot(i, dq, np.pi/2)
                 for j in np.arange(i+1, self.lnum):
@@ -348,7 +349,7 @@ class McClean(ParametrizedCircuit):
             self.has_loaded_component_eigensystems = True
 
         # Sample a component
-        observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+        observable_component = np.random.choice(np.arange(self.observable.num_components), p=self.observable.weight_distribution)
 
         # prepare to run circuit
         if ini_state is None:
