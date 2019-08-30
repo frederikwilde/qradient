@@ -67,6 +67,7 @@ class McClean(ParametrizedCircuit):
         self.state_history = np.ndarray([self.lnum + 1, 2**self.qnum], dtype='complex')
         # FLAGS
         self.has_loaded_eigensystem = False
+        self.has_loaded_component_eigensystems = False
 
     def load_observable(self, observable, use_observable_components=False):
         ParametrizedCircuit.load_observable(self, observable, use_observable_components)
@@ -263,6 +264,81 @@ class McClean(ParametrizedCircuit):
                 dist = np.abs(self.lhs_history[self.lnum-i-1].dot(self.state.vec))**2
                 rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
                 sample2 = (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()
+                self.state.vec = self.state_history[i]
+                grad[i, q] = (sample1 - sample2)/2.
+        return expec_val, grad
+
+    def sample_grad_observable_with_component_sampling(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
+        '''Estimates the gradient by shot_num measurements on a single component of the observable
+
+
+        Returns the exact expectation value!
+        '''
+        # calculate eigensystem if not already done. WARNING: DENSE METHOD!!
+        if not self.has_loaded_component_eigensystems:
+
+            self.component_eigenvals = []
+            self.component_lhs = []
+            self.component_lhs_history = []
+            for j in range(self.observable.num_components):
+                eigenvalues, eigenvectors = np.linalg.eigh(self.observable.component[j].asformat('array'))
+                lhs = McClean.LeftHandSide(eigenvectors.transpose().conj(), self.state.gates)
+                lhs_history = np.ndarray([self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+                lhs_history[0] = self.lhs.ini_matrix.asformat('array')
+
+                self.component_eigenvals.append(eigenvalues)
+                self.component_lhs.append(lhs)
+                self.component_lhs_history.append(lhs_history)
+
+                self.has_loaded_component_eigensystems = True
+
+        # Sample a component
+        observable_component = np.random.choice(np.arange(self.observable.num_components),p=self.observable.weight_distribution)
+
+        # prepare to run circuit
+        if ini_state is None:
+            self.state.reset()
+        else:
+            self.state.vec = ini_state
+        qrange = np.arange(self.qnum)
+        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
+        # run circuit
+        for q in qrange:
+            self.state.yrot(np.pi/4., q)
+        range = progbar_range(hide_progbar)
+        for i in range(self.lnum):
+            self.state.cnot_ladder(0)
+            for q in qrange:
+                self.__rot(i, q)
+            self.state_history[i] = self.state.vec
+        # calculate expectation value
+        if exact_expec_val:
+            expec_val = self.expec_val()
+        else:
+            expec_val = self.sample_expec_val(shot_num)
+        # run reverse circuit
+        self.component_lhs[observable_component].reset()
+        for i in range(self.lnum-1): # we don't need the last one
+            i_inv = self.lnum - i - 1
+            for q in qrange:
+                ax, angle = self.axes[i_inv, q], self.angles[i_inv, q]
+                self.component_lhs[observable_component].rot(ax, angle, q)
+            self.component_lhs[observable_component].cnot_ladder()
+            # Since the lhs matrix is dense after a few layers, we store it dense,
+            # but keep it in sparse format for multiplication with sparse gates.
+            self.component_lhs_history[observable_component][i+1] = self.component_lhs[observable_component].matrix.asformat('array')
+        # calculate gradient finite-shot measurements
+        for i in range(self.lnum):
+            self.state.vec = self.state_history[i]
+            for q in qrange:
+                self.__manual_rot(i, q, np.pi/2)
+                dist = np.abs(self.component_lhs_history[observable_component][self.lnum-i-1].dot(self.state.vec))**2
+                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+                sample1 = (self.component_eigenvals[observable_component][rnd_var.rvs(size=shot_num)]).mean()
+                self.__manual_rot(i, q, -np.pi)
+                dist = np.abs(self.component_lhs_history[observable_component][self.lnum-i-1].dot(self.state.vec))**2
+                rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+                sample2 = (self.component_eigenvals[observable_component][rnd_var.rvs(size=shot_num)]).mean()
                 self.state.vec = self.state_history[i]
                 grad[i, q] = (sample1 - sample2)/2.
         return expec_val, grad
