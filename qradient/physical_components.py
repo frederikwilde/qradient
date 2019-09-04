@@ -249,7 +249,7 @@ class Gates:
         return (out1 + out2).asformat('csr')
 
 class Observable:
-    def __init__(self, qubit_number, observable):
+    def __init__(self, qubit_number, observable, store_components=False):
         '''Takes a dictionary specifying the observable and builds the matrix.
 
         Args:
@@ -266,11 +266,21 @@ class Observable:
         self.has_loaded_projectors = False
         # load observable
         self.info = observable
+        self.store_components = store_components
         self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        self.load_matrix(observable)
+
+
+    def load_matrix(self, observable):
         self.matrix = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
         y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
         z = sp.csr_matrix([[1., 0.], [0., -1.]], dtype='complex')
+
+        if self.store_components:
+            component_list = []
+            component_weights = []
+
         # single-qubit components
         for identifier, matrix in [('x', x), ('y', y), ('z', z)]:
             if identifier in observable:
@@ -279,6 +289,9 @@ class Observable:
                         Observable.__weight_check(weight, identifier)
                         op = kr(kr(sp.identity(2**i), matrix), sp.identity(2**(self.qnum-i-1)))
                         self.matrix += weight * op
+                        if self.store_components:
+                            component_list.append(weight * op)
+                            component_weights.append(weight)
         # two-qubit components
         if 'zz' in observable:
             for i in range(self.qnum):
@@ -295,6 +308,16 @@ class Observable:
                         op = kr(kr(sp.identity(2**i), z), sp.identity(2**(j-i-1)))
                         op = kr(kr(op, z), sp.identity(2**(self.qnum-j-1)))
                         self.matrix += observable['zz'][i, j] * op
+                        if self.store_components:
+                            component_list.append(observable['zz'][i, j] * op)
+                            component_weights.append(observable['zz'][i, j])
+        # store the components and weights as arrays
+        if self.store_components:
+            self.num_components = len(component_weights)
+            self.component_array = np.array(component_list)
+            weight_normalization = np.sum(component_weights)
+            self.weight_distribution = np.array(component_weights)/weight_normalization
+
 
     def load_projectors(self):
         if self.has_loaded_projectors: # in case the caller has not checked

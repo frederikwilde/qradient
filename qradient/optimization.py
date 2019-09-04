@@ -66,15 +66,24 @@ class McCleanOpt(ParametrizedCircuitOptimizer):
     def __str__(self):
         return self.optimizer_info.__str__()
 
-    def step(self, shot_num=0, dense_mode=True):
+    def step(self, shot_num=0, dense_mode=True, component_sampling=False):
         if self.iter >= self.max_iter:
             print('Maximum amount of iterations reached: {}.'.format(self.max_iter))
         if shot_num == 0:
-            e, g = self.circuit.grad_run()
+            if component_sampling == True:
+                e, g = self.circuit.grad_run_with_component_sampling()
+            else:
+                e, g = self.circuit.grad_run()
         elif dense_mode:
-            e, g = self.circuit.sample_grad_observable(shot_num=shot_num)
+            if component_sampling:
+                e, g = self.circuit.sample_grad_observable_with_component_sampling(shot_num=shot_num)
+            else:
+                e, g = self.circuit.sample_grad_observable(shot_num=shot_num)
         else:
-            e, g = self.circuit.sample_grad(shot_num=shot_num)
+            if component_sampling:
+                e, g = self.circuit.sample_grad_with_component_sampling(shot_num=shot_num)
+            else:
+                e, g = self.circuit.sample_grad(shot_num=shot_num)
         self.cost_history[self.iter] = e
         self.optimizer.step(g, e)
         self.iter += 1
