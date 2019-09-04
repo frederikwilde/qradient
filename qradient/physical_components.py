@@ -59,6 +59,10 @@ class State:
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
         self.vec *= np.exp(-1.j * angle * self.gates.classical_ham)
 
+    def exp_ham_classical_component(self, angle, i):
+        '''Rotate around a classical Hamiltonian component, as done in QAOA.'''
+        self.vec *= np.exp(-1.j * angle * self.gates.classical_ham_components[i])
+
     def ham_classical(self):
         '''Multiply a classical Hamiltonian (incl. -1.j) with the state. For derivatives.'''
         self.vec *= -1.j * self.gates.classical_ham
@@ -112,7 +116,7 @@ class Gates:
         '''All x gates summed up. I.e. -1.j * (x_1 + x_2 + ... + x_qnum).'''
         self.x_summed = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         for i in range(self.qnum):
-            self.x_summed += self.xrot[i]
+            self.x_summed += .5 * self.xrot[i]
         return self
 
     def add_yrots(self):
@@ -184,7 +188,7 @@ class Gates:
             self.cnot_ladder[1] = self.cnot_ladder[1].dot(cnots[i, (i+1)%self.qnum])
         return self
 
-    def add_classical_ham(self, observable):
+    def add_classical_ham(self, observable, include_individual_components=False):
         '''Creates a the full vector representing an observable, that is purely classical.
 
         Args:
@@ -205,7 +209,8 @@ class Gates:
                 if weight != None:
                     component = weight * kr(id(i), kr(z, id(self.qnum-i-1)))
                     self.classical_ham += component
-                    component_list.append(component)
+                    if include_individual_components:
+                        component_list.append(component)
         if 'zz' in observable.info:
             for i in range(self.qnum):
                 for j in range(i+1, self.qnum):
@@ -215,8 +220,10 @@ class Gates:
                             kr(z, kr(id(j-i-1), kr(z, id(self.qnum-j-1))))
                         )
                         self.classical_ham += component
-                        component_list.append(component)
-        self.classical_ham_components = np.array(component_list)
+                        if include_individual_components:
+                            component_list.append(component)
+        if include_individual_components:
+            self.classical_ham_components = np.array(component_list)
         return self
 
     def __cnot(self, i, j):
