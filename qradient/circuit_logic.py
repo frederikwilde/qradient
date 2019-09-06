@@ -625,10 +625,10 @@ class Qaoa(ParametrizedCircuit):
         self.has_loaded_eigensystem = False
 
     def load_observable(self, observable):
-        ParametrizedCircuit.load_observable(self, observable)
+        ParametrizedCircuit.load_observable(self, observable, use_observable_components=False)
         self.has_loaded_eigensystem = False
         # Hamiltonian gate components
-        self.state.gates.add_classical_ham(self.observable.to_vec())
+        self.state.gates.add_classical_ham(self.observable, include_individual_components=True)
 
     def run_expec_val(self, betas, gammas, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
         '''Runs the circuit and returns the expectation value under observable'''
