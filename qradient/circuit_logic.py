@@ -19,7 +19,7 @@ class ParametrizedCircuit:
     def init(self, qubit_number, observable, use_observable_components=False):
         self.qnum = qubit_number
         self.state = State(qubit_number) # gates must be added by particular child class
-        self.observable = Observable(qubit_number, observable, use_observable_components)
+        self.observable = Observable(qubit_number, observable, store_components=use_observable_components)
         self.tmp_vec = np.ndarray(2**self.qnum, dtype='complex')
         # FLAGS
         self.has_loaded_projectors = False

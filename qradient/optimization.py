@@ -96,6 +96,51 @@ class McCleanOpt(ParametrizedCircuitOptimizer):
         max_iter = kwargs.get('max_iter', self.max_iter)
         self.__init__(self.circuit, optimizer, max_iter, ini_parameters=ini_parameters)
 
+class QaoaOpt(ParametrizedCircuitOptimizer):
+    def __init__(self, circuit, optimizer, betas, gammas, max_iter=1000):
+        ParametrizedCircuitOptimizer.init(self, circuit, max_iter)
+        # set up history memory
+        self.param_history = np.zeros([self.max_iter, circuit.lnum, 2], dtype='double')
+        self.cost_history = np.zeros(self.max_iter, dtype='double')
+        self.param_history[0] = np.array([betas, gammas]).transpose()
+        # set up optimizer
+        self.optimizer_info = optimizer
+        self.pick(optimizer, np.array([betas, gammas]).transpose())
+
+    def __str__(self):
+        return self.optimizer_info.__str__()
+
+    def step(self, shot_num=0, dense_mode=True):
+        if self.iter >= self.max_iter:
+            print('Maximum amount of iterations reached: {}.'.format(self.max_iter))
+        if shot_num == 0:
+            e, g = self.circuit.grad_run(self.param_history[self.iter, :, 0], self.param_history[self.iter, :, 1])
+        elif dense_mode:
+            e, g = self.circuit.sample_grad_dense(
+                self.param_history[self.iter, :, 0],
+                self.param_history[self.iter, :, 1],
+                shot_num=shot_num
+            )
+        else:
+            raise ValueError('dense_mode must be True, sparse sampling method is not implmented yet.')
+        self.cost_history[self.iter] = e
+        self.optimizer.step(g, e)
+        self.iter += 1
+        self.param_history[self.iter] = self.optimizer.parameters
+
+    def reset(self, **kwargs):
+        if ('betas' in kwargs) and ('gammas' in kwargs):
+            self.param_history[0] = np.array([betas, gammas]).transpose()
+        optimizer = kwargs.get('optimizer', self.optimizer_info)
+        max_iter = kwargs.get('max_iter', self.max_iter)
+        self.__init__(
+            self.circuit,
+            optimizer,
+            self.param_history[0, :, 0],
+            self.param_history[0, :, 1],
+            max_iter
+        )
+
 ### GRADIENT DESCENT METHODS
 class GradientDescentOptimizer:
     def init(self, parameters, hyper_parameters):
