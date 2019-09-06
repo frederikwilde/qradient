@@ -27,3 +27,6 @@ However, notebooks are nice to use for tutorials.
 
 The **policy concerning notebooks** for this repository is that **ALL CELL OUTPUTS SHOULD BE CLEARED** before committing.
 This can be done manually or with a simple filter for git, which you can find the instructions for [here](https://intoli.com/blog/jupyter-notebooks-git/).
+
+This also implies that notebooks should not contain code that runs longer than a few seconds.
+If you want to put results of expensive computations into a notebook, save it to a file using the [data_storage](https://github.com/frederikwilde/qradient/blob/master/tutorials/data-storage.ipynb) module and then import it in the notebook.
