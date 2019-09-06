@@ -19,3 +19,11 @@ pip install -e /path/to/qradient
 
 ## contributing
 If you want to contribute, please open a seperate branch and send a pull request.
+
+## a note on jupyter notebooks
+The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
+The major problem is, that large outputs, like images, are effectively binary and therefore make merging difficult.
+However, notebooks are nice to use for tutorials.
+
+The **policy concerning notebooks** for this repository is that **ALL CELL OUTPUTS SHOULD BE CLEARED** before committing.
+This can be done manually or with a simple filter for git, which you can find the instructions for [here](https://intoli.com/blog/jupyter-notebooks-git/).
