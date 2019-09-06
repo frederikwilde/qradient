@@ -7,3 +7,4 @@
 [ ] license
 [ ] find a better framework for optimization (circuit parameters as torch object?)
 [ ] in case of existing file save as <name>-01
+[ ] histories in optimization should be max_iter + 1 long. 
