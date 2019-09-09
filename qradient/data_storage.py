@@ -4,6 +4,7 @@ import shutil
 import pickle
 import datetime
 import numpy as np
+from logging import debug, info, warn
 
 class Data:
     '''A generic Data object to import and export data to and from JSON, respectively.
@@ -11,48 +12,40 @@ class Data:
     Objects consist of two components: a meta dictionary and a data dictionary. Keys
     used in these dictionaries should be chosen consistently within data categories
     to allow reuse of data processing methods, such as plotting.
-
     '''
-    def __init__(self, title):
+    def __init__(self, path):
         self.meta = {}
-        self.meta['title'] = title
         self.data = {}
+        self.__path = sanitize(path)
+        self.__working_directory = os.getcwd()
+        debug('New data object. Export will dump content to {}/{}'.format(
+            self.__working_directory,
+            self.__path
+        ))
 
-    def export(self, path, overwrite=False):
-        '''Export the object's content to a .pickle file.
-
-        Args:
-            path (str): path to export to.
-        '''
+    def export(self):
+        '''Export the object's content to a .pickle file.'''
         # add export timestamp to meta
         self.meta['export_time_utc'] = str(datetime.datetime.utcnow())
-        self.__sanitize(path)
-        # open file
-        if overwrite:
-            if os.path.exists(self.json_path):
-                os.remove(self.json_path)
-            json_file = open(self.json_path, 'w')
-            if os.path.exists(path):
-                shutil.rmtree(path)
-            os.mkdir(path)
-        else:
-            if os.path.exists(path) or os.path.exists(self.json_path): # don't allow overwriting
-                raise FileExistsError("File {} or directory {} already exist.".format(self.json_path, path))
-            json_file = open(self.json_path, 'w')
-            os.mkdir(path)
         # convert numpy arrays to lists
         for key in self.meta:
             if type(self.meta[key]) == np.ndarray:
                 self.meta[key] = self.meta[key].tolist()
+        create_missing_directories(self.__path)
+        # check if data already exists
+        export_path = secure_export_path(self.__path)
+        # make directory for pickle data
+        os.mkdir(export_path)
         # pickle data
         data_paths = {}
         for key in self.data.keys():
-            p = '{}/{}.pickle'.format(path, key)
+            p = '{}/{}.pickle'.format(export_path, key)
             data_paths[key] = p
             f = open(p, 'wb')
             pickle.dump(self.data[key], f)
             f.close()
-        # export
+        # export meta to JSON file
+        json_file = open(export_path+'.json', 'w')
         json_file.write(
             '{}\n\"META\":\n{},\n\n\"DATA_PATHS\":\n{}\n{}'.format(
                 '{',
@@ -64,12 +57,16 @@ class Data:
         json_file.close()
 
     def load(path):
-        out = Data(None)
-        out.__sanitize(path)
+        out = Data(path)
+        json_path = out.__path + '.json'
         # open file
-        if not (os.path.exists(path) and os.path.exists(out.json_path)):
-            raise IOError("File {} or {} does not exists.".format(path, out.json_path))
-        f = open(out.json_path, 'r')
+        if not (os.path.exists(out.__path) and os.path.exists(json_path)):
+            raise IOError("Directory {} or file {} does not exists in {}.".format(
+                out.__path,
+                json_path,
+                out.__working_directory
+            ))
+        f = open(json_path, 'r')
         # import
         raw = json.load(f)
         f.close()
@@ -81,15 +78,65 @@ class Data:
             f.close()
         return out
 
-    def __repr__(self):
-        return self.meta['title']
-
     def show(self):
         for key in self.meta.keys():
             print('{}:'.format(key))
             print('\t{}\n'.format(self.meta[key]))
 
-    def __sanitize(self, path):
-        if '.' in path:
-            raise ValueError('Enter path without file extension!')
-        self.json_path = '{}.json'.format(path)
+def secure_export_path(path):
+    data_exists = os.path.exists(path + '.json') or os.path.exists(path)
+    if data_exists:
+        export_path = path + '-1'
+        counter = 2
+        while True:
+            if os.path.exists(export_path + '.json') or os.path.exists(export_path):
+                export_path = export_path[:-1] + str(counter)
+                counter += 1
+            else:
+                break
+    else:
+        export_path = path
+    if data_exists:
+        info(''.join([
+            'There is already data at {}.'.format(path),
+            'Export will be dumped to {}.'.format(export_path)
+        ]))
+    else:
+        debug('Exporting data to {}.'.format(export_path))
+    return export_path
+
+def create_missing_directories(path):
+    path_components = path.split('/')
+    if len(path_components) > 1: # if storage into a subdirectory is wanted
+        for i in range(1, len(path_components)):
+            dir = '/'.join(path_components[:i])
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+                info('Directory {} did not exist, it was created.'.format(dir))
+
+def sanitize(path):
+    if type(path) != str:
+        warn(''.join([
+            'Path has type {}. Should be string. '.format(type(path)),
+            'Path has been set to: {}/output'.format(os.getcwd())
+        ]))
+        return('output')
+    if path == '':
+        warn(''.join([
+            'Path was an empty string. ',
+            'Path has been set to: {}/output'.format(os.getcwd())
+        ]))
+        return('output')
+    path_components = path.split('/')
+    name = path_components[-1]
+    name_components = name.split('.')
+    for comp in name_components:
+        if len(comp) != 0:
+            path_components[-1] = comp
+            break
+    new_path = '/'.join(path_components).replace(' ', '_')
+    if new_path[-1] == '/':
+        new_path = new_path[:-1]
+    if new_path != path:
+        info('Path has been sanitized. It is now: {}'.format(new_path))
+    return new_path
