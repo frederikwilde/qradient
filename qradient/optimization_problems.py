@@ -19,7 +19,7 @@ class MaxCut:
             self.random()
         else:
             raise ValueError('Specify either edge_set or edge_num')
-            
+
     def random(self):
         indeces = np.random.choice(len(self.all_edges), size=self.edge_num, replace=False)
         edge_set = []
@@ -38,7 +38,6 @@ class MaxCut:
         vertex_locations = []
         for i in range(self.vertex_num):
             vertex_locations.append([np.sin(2*np.pi*i/self.vertex_num), np.cos(2*np.pi*i/self.vertex_num)])
-        plt.figure(figsize=[4,4])
         plt.xticks([])
         plt.yticks([])
         for vl in vertex_locations:
@@ -47,4 +46,3 @@ class MaxCut:
             v1 = vertex_locations[edge[0]]
             v2 = vertex_locations[edge[1]]
             plt.plot([v1[0], v2[0]], [v1[1], v2[1]], 'black')
-        plt.show()
