@@ -130,7 +130,7 @@ class QaoaOpt(ParametrizedCircuitOptimizer):
 
     def reset(self, **kwargs):
         if ('betas' in kwargs) and ('gammas' in kwargs):
-            self.param_history[0] = np.array([betas, gammas]).transpose()
+            self.param_history[0] = np.array([kwargs['betas'], kwargs['gammas']]).transpose()
         optimizer = kwargs.get('optimizer', self.optimizer_info)
         max_iter = kwargs.get('max_iter', self.max_iter)
         self.__init__(
