@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 class MaxCut:
     def __init__(self, vertex_num, edge_num=None, edge_set=None):
@@ -34,15 +33,19 @@ class MaxCut:
             zz[edge[0], edge[1]] = 1.
         return {'zz': zz}
 
-    def plot(self):
+    def plot_lists(self):
         vertex_locations = []
+        vertex_loc_tuples = []
         for i in range(self.vertex_num):
-            vertex_locations.append([np.sin(2*np.pi*i/self.vertex_num), np.cos(2*np.pi*i/self.vertex_num)])
-        plt.xticks([])
-        plt.yticks([])
-        for vl in vertex_locations:
-            plt.plot(vl[0], vl[1], 'bo')
+            vertex_locations.append([np.sin(2*np.pi*i/self.vertex_num)])
+            vertex_locations.append([np.cos(2*np.pi*i/self.vertex_num)])
+            vertex_loc_tuples.append([vertex_locations[-2], vertex_locations[-1]])
+            vertex_locations.append('ro')
+        edge_locations = []
         for edge in self.edge_set:
-            v1 = vertex_locations[edge[0]]
-            v2 = vertex_locations[edge[1]]
-            plt.plot([v1[0], v2[0]], [v1[1], v2[1]], 'black')
+            v1 = vertex_loc_tuples[edge[0]]
+            v2 = vertex_loc_tuples[edge[1]]
+            edge_locations.append([v1[0], v2[0]])
+            edge_locations.append([v1[1], v2[1]])
+            edge_locations.append('black')
+        return vertex_locations, edge_locations
