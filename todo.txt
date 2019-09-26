@@ -1,6 +1,6 @@
 [ ] unittest
 [ ] integrate tests with travis.yml
-[ ] subdivide circuit_logic
+[x] subdivide circuit_logic
 [ ] cython with numpy in physical_components
 [ ] clean up tutorial notebooks and timing notebooks
 [x] automatic notebook clear-all-cell-outputs

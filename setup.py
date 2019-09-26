@@ -22,7 +22,7 @@ setup(
     install_requires=[
         'scipy',
         'tqdm',
-        'Cython'
+        # 'Cython'
     ],
     # zip_safe=False
 )
