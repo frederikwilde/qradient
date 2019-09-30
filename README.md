@@ -1,10 +1,10 @@
-# qradient
+# qradient [kɹeɪdi.ənt]
 This package provides a platform for fast simulation of parametrized quantum circuits.
 Also, fast optimization is facilitated by efficient gradient calculations, something that cannot be done on a physical quantum device.
 
 ## setup for _importing_ the package
 1) Clone the repository.
-2) Create virtual environment in the repository you want to work in and activate it. E.g. with 'venv': 
+2) Create virtual environment in the repository you want to work in and activate it. E.g. with 'venv':
 ```
 python3 -m venv my-env
 source ./my-env/bin/activate
@@ -19,7 +19,7 @@ This package was developed with Python 3.7.2. With older versions you might have
 Simply edit the version number in the 'requirements.txt' file.
 
 1) Clone the repository.
-2) Create virtual environment in the package repository ```qradient/``` and activate it. E.g. with 'venv': 
+2) Create virtual environment in the package repository ```qradient/``` and activate it. E.g. with 'venv':
 ```
 python3 -m venv my-env
 source ./my-env/bin/activate
