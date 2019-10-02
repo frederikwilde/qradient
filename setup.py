@@ -12,7 +12,7 @@ from setuptools import setup, Extension
 setup(
     # ext_modules=ext_modules,
     name='qradient',
-    version='1.0.0',
+    version='1.0',
     description='A package for efficient simulation and differentiation of parametrized quantum circuits.',
     author='Frederik Wilde',
     author_email='wilde.pysics@gmail.com',

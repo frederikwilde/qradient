@@ -2,36 +2,24 @@
 This package provides a platform for fast simulation of parametrized quantum circuits.
 Also, fast optimization is facilitated by efficient gradient calculations, something that cannot be done on a physical quantum device.
 
-## setup for _importing_ the package
-1) Clone the repository.
-2) Create virtual environment in the repository you want to work in and activate it. E.g. with 'venv':
+## status of development
+This package is under development and many components are far from optimal. Future versions will be code-breaking.
+
+## installing the package (recommendation)
+1) Clone this repository.
+2) Create a virtual environment in the repository you want to work in and activate it. E.g. with 'venv':
 ```
 python3 -m venv my-env
 source ./my-env/bin/activate
 ```
-3) Install the qradient package. E.g. with pip
+3) Install the package into your environment
 ```
 pip install -e /path/to/qradient
 ```
-
-## setup for _working on_ the package
-This package was developed with Python 3.7.2. With older versions you might have to adapt some versions of the dependencies.
-Simply edit the version number in the 'requirements.txt' file.
-
-1) Clone the repository.
-2) Create virtual environment in the package repository ```qradient/``` and activate it. E.g. with 'venv':
-```
-python3 -m venv my-env
-source ./my-env/bin/activate
-```
-3) Install the requirements. E.g. with pip:
-```
-pip install -r requirements.txt
-```
-
+where ```-e``` installs it in 'editible' mode, i.e. you can make changes to the package without having to reinstall it afterwards.
 
 ## contributing
-If you want to contribute, please open a seperate branch and send a pull request.
+If you want to contribute, please create a new branch and send a pull request.
 
 ## a note on jupyter notebooks
 The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
