@@ -17,7 +17,7 @@ setup(
     author='Frederik Wilde',
     author_email='wilde.pysics@gmail.com',
     url='https://github.com/frederikwilde/qradient',
-    # license='MIT',
+    license='GPLv3',
     packages=['qradient'],
     install_requires=[
         'scipy',
