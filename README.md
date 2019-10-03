@@ -19,7 +19,7 @@ pip install -e /path/to/qradient
 where ```-e``` installs it in 'editible' mode, i.e. you can make changes to the package without having to reinstall it afterwards.
 
 ## contributing
-If you want to contribute, please create a new branch and send a pull request.
+If you want to contribute, please create a new branch and make a pull request.
 
 ## a note on jupyter notebooks
 The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
@@ -31,3 +31,15 @@ This can be done manually or with a simple filter for git, which you can find th
 
 This also implies that notebooks should not contain code that runs longer than a few seconds.
 If you want to put results of expensive computations into a notebook, save it to a file using the [data_storage](https://github.com/frederikwilde/qradient/blob/master/tutorials/data-storage.ipynb) module and then import it in the notebook.
+
+## acknowledgements and citing
+I acknowledge funding from the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany´s Excellence Strategy – MATH+ : The Berlin Mathematics Research Center, EXC-2046/1 – project ID: 390685689.
+
+If you use this code for work that you publish, please cite this repository.
+```
+@misc{qradient,
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/frederikwilde/qradient}}
+}
+```
