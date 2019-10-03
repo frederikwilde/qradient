@@ -43,3 +43,6 @@ If you use this code for work that you publish, please cite this repository.
   howpublished = {\url{https://github.com/frederikwilde/qradient}}
 }
 ```
+
+## license
+This work is subject to the [GNU General Public License](https://www.gnu.org/licenses/gpl-3.0.txt) as specified in the [LICENSE](https://github.com/frederikwilde/qradient/blob/master/LICENSE) file.
