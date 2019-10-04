@@ -32,8 +32,11 @@ This can be done manually or with a simple filter for git, which you can find th
 This also implies that notebooks should not contain code that runs longer than a few seconds.
 If you want to put results of expensive computations into a notebook, save it to a file using the [data_storage](https://github.com/frederikwilde/qradient/blob/master/tutorials/data-storage.ipynb) module and then import it in the notebook.
 
+## contact
+If you have questions or comments, feel free to open a GitHub issue or send me a mail at: wilde.physics[ät]gmail.com
+
 ## acknowledgements and citing
-I acknowledge funding from the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany´s Excellence Strategy – MATH+ : The Berlin Mathematics Research Center, EXC-2046/1 – project ID: 390685689.
+I, Frederik Wilde, acknowledge funding from the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany´s Excellence Strategy – MATH+ : The Berlin Mathematics Research Center, EXC-2046/1 – project ID: 390685689.
 
 If you use this code for work that you publish, please cite this repository.
 ```
