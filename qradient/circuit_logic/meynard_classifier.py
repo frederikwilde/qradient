@@ -1,4 +1,4 @@
-from .utils import ParametrizedCircuit, progbar_range
+from .base import ParametrizedCircuit, progbar_range
 from qradient.physical_components import Gates, State, Observable
 import numpy as np
 
