@@ -6,6 +6,13 @@ import datetime
 import numpy as np
 from logging import debug, info, warn
 
+import warnings
+warnings.warn(
+    'Data storage is only supported up to version 1.0. Use HDF5 to store data.',
+    DeprecationWarning,
+    stacklevel=2
+)
+
 class Data:
     '''A generic Data object to import and export data to and from JSON, respectively.
 
