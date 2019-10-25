@@ -21,7 +21,8 @@ class MaxCut:
             raise ValueError('Specify exactly one of two arguments.' + \
                 f' edge_num was {edge_num} and edge_probability was {edge_probability}.')
         if edge_num != None:
-            self.edge_set = np.random.choice(self.all_edges, size=edge_num, replace=False)
+            indeces = np.random.choice(range(len(self.all_edges)), size=edge_num, replace=False)
+            self.edge_set = self.all_edges[indeces]
         else:
             self.edge_set = []
             for e in self.all_edges:
