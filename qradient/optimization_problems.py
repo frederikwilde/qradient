@@ -1,34 +1,34 @@
 import numpy as np
 
 class MaxCut:
-    def __init__(self, vertex_num, edge_set=None, edge_num=None, edge_probability=None,):
+    def __init__(self, vertex_num, **kwargs):
         all_edges = []
         for i in range(vertex_num):
             for j in range(i+1, vertex_num):
                 all_edges.append([i, j])
         self.all_edges = np.array(all_edges)
         self.vertex_num = vertex_num
-        if edge_set != None:
-            self.edge_set = edge_set
-        elif edge_num != None or edge_probability != None:
-            self.__random(edge_num=edge_num, edge_probability=edge_probability)
+        if 'edge_set' in kwargs:
+            self.edge_set = kwargs['edge_set']
+        elif 'edge_num' in kwargs:
+            self.__random(edge_num=kwargs['edge_num'])
+        elif 'edge_probability' in kwargs:
+            self.__random(edge_probability=kwargs['edge_probability'])
         else:
             raise ValueError('Specify one of the three edge_set, edge_num, or edge_probability')
 
-    def __random(self, edge_num=None, edge_probability=None):
-        if (edge_num == None and edge_probability == None) or (edge_num != None and edge_probability != None):
-            # sanity check
-            raise ValueError('Specify exactly one of two arguments.' + \
-                f' edge_num was {edge_num} and edge_probability was {edge_probability}.')
-        if edge_num != None:
-            indeces = np.random.choice(range(len(self.all_edges)), size=edge_num, replace=False)
+    def __random(self, **kwargs):
+        if 'edge_num' in kwargs:
+            indeces = np.random.choice(range(len(self.all_edges)), size=kwargs['edge_num'], replace=False)
             self.edge_set = self.all_edges[indeces]
-        else:
+        elif 'edge_probability' in kwargs:
             self.edge_set = []
             for e in self.all_edges:
-                if np.random.rand() < edge_probability:
+                if np.random.rand() < kwargs['edge_probability']:
                     self.edge_set.append(e)
             self.edge_set = np.array(self.edge_set)
+        else:
+            raise ValueError('Specify either edge_num or edge_probability.')
 
     def to_observable(self):
         zz = np.full([self.vertex_num, self.vertex_num], None)
