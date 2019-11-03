@@ -21,6 +21,26 @@ where ```-e``` installs it in 'editible' mode, i.e. you can make changes to the 
 ## contributing
 If you want to contribute, please create a new branch and make a pull request.
 
+## runtimes
+There are certainly quantum-circuit simulators out there that are much faster than this one.
+However, when your circuit is parametrized by many parameters, this package might provide the fastest way to access the gradient.
+To show this consider the ```McClean``` (inspired by a recent [paper](https://www.nature.com/articles/s41467-018-07090-4) by McClean et al.) circuit sketched below, where each R is an arbitrary Pauli rotation, each parametrized by one individual parameter.
+Finally a Pauli ZZ measurement is performed on the first and second qubit (the choice of the observable only marginally affects the runtime).
+The circuit can be built by the following piece of code:
+```python
+import numpy as np
+from qradient.circuit_logic import McClean
+qubit_num, layer_num = 3, 3
+interactions = np.full((qubit_num, qubit_num), None)
+interactions[0, 1] = 1. # only measure ZZ on first and second qubit
+circuit = McClean(qubit_num, {'zz': interactions}, layer_num)
+```
+The method whose runtimes are shown below is `circuit.grad_run()`, which returns the expectation value and the full gradient of the circuit with respect to all `qubit_num * layer_num` parameters.
+
+| circuit | runtimes |
+| ------- | -------- |
+| ![McClean circuit](https://github.com/frederikwilde/qradient/blob/master/images/mcclean_sketch.png) | ![runtime diagram](https://github.com/frederikwilde/qradient/blob/master/images/timing.png) |
+
 ## a note on jupyter notebooks
 The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
 The major problem is, that large outputs, like images, are effectively binary and therefore make merging difficult.
