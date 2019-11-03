@@ -39,7 +39,7 @@ The method whose runtimes are shown below is `circuit.grad_run()`, which returns
 
 | circuit | runtimes |
 | ------- | -------- |
-| ![McClean circuit](https://github.com/frederikwilde/qradient/blob/master/images/mcclean_sketch.png) | ![runtime diagram](https://github.com/frederikwilde/qradient/blob/master/images/mcclean_timing.png) |
+| ![McClean circuit](https://github.com/frederikwilde/qradient/blob/master/images/mcclean_sketch.png) | ![runtime diagram](https://github.com/frederikwilde/qradient/blob/master/images/timing.png) |
 
 ## a note on jupyter notebooks
 The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
