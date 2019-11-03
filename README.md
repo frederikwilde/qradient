@@ -41,6 +41,8 @@ The method whose runtimes are shown below is `circuit.grad_run()`, which returns
 | ------- | -------- |
 | ![McClean circuit](https://github.com/frederikwilde/qradient/blob/master/images/mcclean_sketch.png) | ![runtime diagram](https://github.com/frederikwilde/qradient/blob/master/images/timing.png) |
 
+*These numbers where obtained on a 2,3 GHz Quad-Core Intel Core i5 processor*
+
 ## a note on jupyter notebooks
 The workflow of jupyter notebooks is somewhat unfitting for working with a VCS.
 The major problem is, that large outputs, like images, are effectively binary and therefore make merging difficult.
