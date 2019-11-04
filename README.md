@@ -52,7 +52,7 @@ The **policy concerning notebooks** for this repository is that **ALL CELL OUTPU
 This can be done manually or with a simple filter for git, which you can find the instructions for [here](https://intoli.com/blog/jupyter-notebooks-git/).
 
 This also implies that notebooks should not contain code that runs longer than a few seconds.
-If you want to put results of expensive computations into a notebook, save it to a file using the [data_storage](https://github.com/frederikwilde/qradient/blob/master/tutorials/data-storage.ipynb) module and then import it in the notebook.
+If you want to put results of expensive computations into a notebook, save it to a file using a file export package (e.g. [h5py](https://docs.h5py.org/en/stable/index.html) for HDF5 import/export) and then import it in the notebook.
 
 ## contact
 If you have questions or comments, feel free to open a GitHub issue or send me a mail at: wilde.physics[ät]gmail.com
