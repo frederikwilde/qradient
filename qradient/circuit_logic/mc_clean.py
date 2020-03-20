@@ -272,7 +272,14 @@ class McClean(ParametrizedCircuit):
                 grad[i, q] = (sample1 - sample2)/2.
         return expec_val, grad
 
-    def sample_grad_observable_with_component_sampling(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
+    def sample_grad_observable_with_component_sampling(self, *args):
+        warnings.warn(
+            'Method sample_grad_observable_with_component_sampling is now called sample_grad_dense_with_component_sampling.',
+            DeprecationWarning,
+            stacklevel=2
+        )
+
+    def sample_grad_dense_with_component_sampling(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
         '''Estimates the gradient by shot_num measurements on a single component of the observable
 
 
