@@ -202,8 +202,14 @@ class McClean(ParametrizedCircuit):
                 grad[i, dq] = .5 * (o_plus - o_minus)
         return expec_val, grad
 
-    # NOTE: rename this to sample_grad_dense
-    def sample_grad_observable(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
+    def sample_grad_observable(self, *args):
+        warnings.warn(
+            'Method sample_grad_observable is now called sample_grad_dense.',
+            DeprecationWarning,
+            stacklevel=2
+        )
+
+    def sample_grad_dense(self, shot_num=1, hide_progbar=True, exact_expec_val=True, ini_state=None):
         '''Estimates the gradient by shot_num measurements.
 
         This method assumes that one can measure the observable as it is. For generic
