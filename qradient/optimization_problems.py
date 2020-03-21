@@ -2,11 +2,6 @@ import numpy as np
 
 class MaxCut:
     def __init__(self, vertex_num, **kwargs):
-        all_edges = []
-        for i in range(vertex_num):
-            for j in range(i+1, vertex_num):
-                all_edges.append([i, j])
-        self.all_edges = np.array(all_edges)
         self.vertex_num = vertex_num
         if 'edge_set' in kwargs:
             self.edge_set = kwargs['edge_set']
@@ -18,12 +13,17 @@ class MaxCut:
             raise ValueError('Specify one of the three edge_set, edge_num, or edge_probability')
 
     def __random(self, **kwargs):
+        all_edges = []
+        for i in range(self.vertex_num):
+            for j in range(i+1, self.vertex_num):
+                all_edges.append([i, j])
+        all_edges = np.array(all_edges)
         if 'edge_num' in kwargs:
-            indeces = np.random.choice(range(len(self.all_edges)), size=kwargs['edge_num'], replace=False)
-            self.edge_set = self.all_edges[indeces]
+            indeces = np.random.choice(range(len(all_edges)), size=kwargs['edge_num'], replace=False)
+            self.edge_set = all_edges[indeces]
         elif 'edge_probability' in kwargs:
             self.edge_set = []
-            for e in self.all_edges:
+            for e in all_edges:
                 if np.random.rand() < kwargs['edge_probability']:
                     self.edge_set.append(e)
             self.edge_set = np.array(self.edge_set)
