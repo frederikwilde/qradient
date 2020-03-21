@@ -417,22 +417,3 @@ class McClean(ParametrizedCircuit):
             self.state.dzrot(angle_sign * self.angles[i, q], q)
         else:
             raise ValueError('Invalid axis {}'.format(ax))
-
-    ############################################################################
-    # outdated method:
-    def grad(self, hide_progbar=True):
-        ##### Plain and stupid. Not efficient.
-        warnings.warn('This function is very inefficient, use grad_run instead.')
-        grad = np.ndarray([self.lnum, self.qnum], dtype='double')
-        eps = 10.**-8
-        myrange = progbar_range(hide_progbar)
-        qrange = np.arange(self.qnum)
-        for i in myrange(self.lnum):
-            for q in qrange:
-                self.angles[i, q] += eps
-                e2 = self.run_expec_val()
-                self.angles[i, q] -= 2*eps
-                e1 = self.run_expec_val()
-                self.angles[i, q] += eps
-                grad[i, q] = np.real(e2 - e1) / (2.*eps)
-        return grad
