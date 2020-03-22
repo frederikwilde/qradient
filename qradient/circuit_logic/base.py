@@ -14,11 +14,6 @@ class ParametrizedCircuit:
         # FLAGS
         self.has_loaded_projectors = False
 
-    def load_observable(self, observable, use_observable_components):
-        '''For loading a new observable'''
-        self.observable = Observable(self.qnum, observable, use_observable_components)
-        self.has_loaded_projectors = False
-
     def expec_val(self):
         return self.state.vec.conj().dot(
             self.observable.matrix.dot(self.state.vec)

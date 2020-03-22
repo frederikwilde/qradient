@@ -24,11 +24,6 @@ class McClean(ParametrizedCircuit):
         self.has_loaded_eigensystem = False
         self.has_loaded_component_eigensystems = False
 
-    def load_observable(self, observable, use_observable_components=False):
-        ParametrizedCircuit.load_observable(self, observable, use_observable_components)
-        self.has_loaded_eigensystem = False
-        self.has_loaded_component_eigensystems = False
-
     def run_expec_val(self, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
         '''Runs the circuit and returns the expectation value under observable'''
         if ini_state is None:
