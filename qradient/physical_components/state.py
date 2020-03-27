@@ -5,45 +5,74 @@ import warnings
 kr = sp.kron
 
 class State:
-    def __init__(self, qubit_number, gates=None, ini='0'):
-        self.qnum = qubit_number
-        self.__ini = ini # used in reset method
+    def __init__(self, qubit_number, ini='0'):
+        self.__qnum = qubit_number
+        self.__ini = ini
         self.reset() # initialization of the state vector
-        self.gates = gates
+        self.__gates = Gates(qubit_number)
+
+    def load_lefthandside(self):
+        if not hasattr(self, 'lhs'):
+            self.lhs = sp.identity(2**self.__qnum, dtype='complex', format='csr')
+        else:
+            warnings.warn('lefthandside attribute already loaded. Ignoring function call.')
+
+    def load_center_matrix(self, ini_matrix):
+        if not hasattr(self, 'center_matrix'):
+            self.center_matrix = ini_matrix.copy()
+            self.__center_matrix_ini = ini_matrix.copy()
+        else:
+            warnings.warn('center_matrix attribute already loaded. Ignoring function call.')
+
+    def reset(self):
+        # reset vec
+        if self.__ini == '0':
+            self.vec = np.zeros(2**self.__qnum, dtype='complex')
+            self.vec[0] = 1.
+        elif self.__ini == '+':
+            self.vec = 2.**(-.5*self.__qnum) * np.ones(2**self.__qnum, dtype='complex')
+        else:
+            raise ValueError('Initialization format {} not understood.'.format(self.__ini))
+        # reset lhs
+        if hasattr(self, 'lhs'):
+            self.lhs = sp.identity(2**self.__qnum, dtype='complex', format='csr')
+        # reset center_matrix
+        if hasattr(self, 'center_matrix'):
+            self.center_matrix = self.__center_matrix_ini.copy()
 
     def xrot(self, angle, i):
-        self.vec = np.sin(.5*angle) * self.gates.xrot[i].dot(self.vec) + \
+        self.vec = np.sin(.5*angle) * self.__gates.xrot[i].dot(self.vec) + \
             np.cos(.5*angle) * self.vec
 
     def dxrot(self, angle, i):
         '''Derivative of xrot.'''
-        self.vec = .5*np.cos(.5*angle) * self.gates.xrot[i].dot(self.vec) - \
+        self.vec = .5*np.cos(.5*angle) * self.__gates.xrot[i].dot(self.vec) - \
             .5*np.sin(.5*angle) * self.vec
 
     def x_summed(self):
         '''Multiply the sum of all x-Paulis (incl. -1.j). For derivatives.'''
-        self.vec = self.gates.x_summed.dot(self.vec)
+        self.vec = self.__gates.x_summed.dot(self.vec)
 
     def yrot(self, angle, i):
-        self.vec = np.sin(.5*angle) * self.gates.yrot[i].dot(self.vec) + \
+        self.vec = np.sin(.5*angle) * self.__gates.yrot[i].dot(self.vec) + \
             np.cos(.5*angle) * self.vec
 
     def dyrot(self, angle, i):
         '''Derivative of yrot.'''
-        self.vec = .5*np.cos(.5*angle) * self.gates.yrot[i].dot(self.vec) - \
+        self.vec = .5*np.cos(.5*angle) * self.__gates.yrot[i].dot(self.vec) - \
             .5*np.sin(.5*angle) * self.vec
 
     def zrot(self, angle, i):
-        self.vec = np.exp(-.5j*angle) * self.gates.zrot_pos[i] * self.vec + \
-            np.exp(.5j*angle) * self.gates.zrot_neg[i] * self.vec
+        self.vec = np.exp(-.5j*angle) * self.__gates.zrot_pos[i] * self.vec + \
+            np.exp(.5j*angle) * self.__gates.zrot_neg[i] * self.vec
 
     def dzrot(self, angle, i):
         '''Derivative of zrot.'''
-        self.vec = -.5j * np.exp(-.5j*angle) * self.gates.zrot_pos[i] * self.vec + \
-            .5j * np.exp(.5j*angle) * self.gates.zrot_neg[i] * self.vec
+        self.vec = -.5j * np.exp(-.5j*angle) * self.__gates.zrot_pos[i] * self.vec + \
+            .5j * np.exp(.5j*angle) * self.__gates.zrot_neg[i] * self.vec
 
     def cnot(self, i, j):
-        self.vec = self.gates.cnots[i, j].dot(self.vec)
+        self.vec = self.__gates.cnots[i, j].dot(self.vec)
 
     def cnot_ladder(self, stacking):
         '''Applies a one-dimensional ladder of CNOT gates
@@ -53,36 +82,25 @@ class State:
                 2-3, ... and 1-2, 3-4, ... in the second layer) for stacking=0.
                 For stacking=1 the order is reversed.
         '''
-        self.vec = self.gates.cnot_ladder[stacking].dot(self.vec)
+        self.vec = self.__gates.cnot_ladder[stacking].dot(self.vec)
 
     def exp_ham_classical(self, angle):
         '''Rotate around a classical Hamiltonian, as done in QAOA.'''
-        self.vec *= np.exp(-1.j * angle * self.gates.classical_ham)
+        self.vec *= np.exp(-1.j * angle * self.__gates.classical_ham)
 
     def exp_ham_classical_component(self, angle, i):
         '''Rotate around a classical Hamiltonian component, as done in QAOA.'''
-        self.vec *= np.exp(-1.j * angle * self.gates.classical_ham_components[i])
+        self.vec *= np.exp(-1.j * angle * self.__gates.classical_ham_components[i])
 
     def ham_classical(self):
         '''Multiply a classical Hamiltonian (incl. -1.j) with the state. For derivatives.'''
-        self.vec *= -1.j * self.gates.classical_ham
+        self.vec *= -1.j * self.__gates.classical_ham
 
     def custom_gate(self, key):
-        self.vec = self.gates.custom[key].dot(self.vec)
+        self.vec = self.__gates.custom[key].dot(self.vec)
 
     def multiply_matrix(self, matrix):
         self.vec = matrix.dot(self.vec)
-
-    def reset(self, ini=None):
-        if not ini == None:
-            self.__ini = ini
-        if self.__ini == '0':
-            self.vec = np.zeros(2**self.qnum, dtype='complex')
-            self.vec[0] = 1.
-        elif self.__ini == '+':
-            self.vec = 2.**(-.5*self.qnum) * np.ones(2**self.qnum, dtype='complex')
-        else:
-            raise ValueError('Initialization format {} not understood.'.format(self.__ini))
 
     def norm_error(self):
         return 1. - np.linalg.norm(self.vec)
