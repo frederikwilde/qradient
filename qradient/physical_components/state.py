@@ -331,6 +331,30 @@ class State:
     def norm_error(self):
         return 1. - np.linalg.norm(self.vec)
 
+    ############################################################################
+    # private methods
+    def __cnot(self, i, j):
+        '''Controlled NOT gate. First argument is the control qubit.'''
+        if i < j and j < self.__qnum:
+            out1 = _skr(_id(i), _proj0)
+            out1 = _skr(out1, _id(self.__qnum-i-1))
+
+            out2 = _skr(_id(i), _proj1)
+            out2 = _skr(out2, _id(j-i-1))
+            out2 = _skr(out2, _x)
+            out2 = _skr(out2, _id(self.__qnum-j-1))
+        elif i > j and i < self.__qnum:
+            out1 = _skr(_id(i), _proj0)
+            out1 = _skr(out1, _id(self.__qnum-i-1))
+
+            out2 = _skr(_id(j), _x)
+            out2 = _skr(out2, _id(i-j-1))
+            out2 = _skr(out2, _proj1)
+            out2 = _skr(out2, _id(self.__qnum-i-1))
+        else:
+            raise ValueError('Invalid CNOT indecies {} and {}, for {} qubits.'.format(i, j, self.__qnum))
+        return (out1 + out2).asformat('csr')
+
 
 _skr = sp.kron
 _nkr = np.kron
@@ -339,25 +363,3 @@ _y = sp.coo_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
 _id = lambda i: sp.identity(2**i, dtype='complex', format='coo')
 _proj0 = sp.coo_matrix([[1., 0.], [0., 0.]], dtype='complex')
 _proj1 = sp.coo_matrix([[0., 0.], [0., 1.]], dtype='complex')
-
-def _cnot(self, i, j):
-    '''Controlled NOT gate. First argument is the control qubit.'''
-    if i < j and j < self.__qnum:
-        out1 = _skr(_id(i), _proj0)
-        out1 = _skr(out1, _id(self.__qnum-i-1))
-
-        out2 = _skr(_id(i), _proj1)
-        out2 = _skr(out2, _id(j-i-1))
-        out2 = _skr(out2, _x)
-        out2 = _skr(out2, _id(self.__qnum-j-1))
-    elif i > j and i < self.__qnum:
-        out1 = _skr(_id(i), _proj0)
-        out1 = _skr(out1, _id(self.__qnum-i-1))
-
-        out2 = _skr(_id(j), _x)
-        out2 = _skr(out2, _id(i-j-1))
-        out2 = _skr(out2, _proj1)
-        out2 = _skr(out2, _id(self.__qnum-i-1))
-    else:
-        raise ValueError('Invalid CNOT indecies {} and {}, for {} qubits.'.format(i, j, self.__qnum))
-    return (out1 + out2).asformat('csr')
