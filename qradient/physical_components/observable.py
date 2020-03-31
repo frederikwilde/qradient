@@ -5,11 +5,10 @@ import warnings
 kr = sp.kron
 
 class Observable:
-    def __init__(self, qubit_number, observable, store_components=False):
+    def __init__(self, observable):
         '''Takes a dictionary specifying the observable and builds the matrix.
 
         Args:
-            qubit_number (int): Number of qubits.
             observable (dict): can contain the following fields:
                 'x': a 1d-array of prefactors for single-qubit Pauli X. Choose None
                     for no matrix.
@@ -17,17 +16,22 @@ class Observable:
                 'z': 1d-array for Pauli Z.
                 'zz': a 2d-array as upper triangular matrix for two-qubit ZZ terms.
         '''
-        self.qnum = qubit_number
-        # FLAGS
-        self.has_loaded_projectors = False
+        self.__qnum = next(iter(observable.values())).shape[0]
+        for v in observable.values():
+            for s in v.shape:
+                if s != self.__qnum:
+                    raise ValueError((
+                        'Inconsistent shapes in observable dictionary.',
+                        'Cannot infer qubit_number.'
+                    ))
+
         # load observable
-        self.info = observable
-        self.store_components = store_components
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        self.dict = observable
+        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
         self.load_matrix(observable)
 
 
-    def load_matrix(self, observable):
+    def load_matrix(self, observable, store_components=False):
         self.matrix = sp.coo_matrix((2**self.qnum, 2**self.qnum), dtype='complex').asformat('csr')
         x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
         y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
@@ -99,7 +103,7 @@ class Observable:
         self.projector_weights = np.array(projector_weights)
         self.has_loaded_projectors = True
 
-    def check_observable(self, known_keys, warning=None):
+    def __check_observable(self, known_keys, warning=None):
         '''Tests whether observable only contains known keys and throws a warning otherwise.'''
         for key in list(self.info.keys()):
             unknown = True
