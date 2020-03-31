@@ -3,13 +3,7 @@ import scipy.sparse.linalg as lg
 import numpy as np
 import warnings
 
-_skr = sp.kron
-_nkr = np.kron
-_x = sp.coo_matrix([[0., 1.], [1., 0.]], dtype='complex')
-_y = sp.coo_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
-_id = lambda i: sp.identity(2**i, dtype='complex', format='coo')
-_proj0 = sp.coo_matrix([[1., 0.], [0., 0.]], dtype='complex')
-_proj1 = sp.coo_matrix([[0., 0.], [0., 1.]], dtype='complex')
+
 
 class State:
     '''
@@ -331,11 +325,20 @@ class State:
 
     def classical_ham_center_matrix(self):
         warnings.warn('Not implemented.')
-        
+
     ############################################################################
     # checking that the 2-norm is 1.
     def norm_error(self):
         return 1. - np.linalg.norm(self.vec)
+
+
+_skr = sp.kron
+_nkr = np.kron
+_x = sp.coo_matrix([[0., 1.], [1., 0.]], dtype='complex')
+_y = sp.coo_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
+_id = lambda i: sp.identity(2**i, dtype='complex', format='coo')
+_proj0 = sp.coo_matrix([[1., 0.], [0., 0.]], dtype='complex')
+_proj1 = sp.coo_matrix([[0., 0.], [0., 1.]], dtype='complex')
 
 def _cnot(self, i, j):
     '''Controlled NOT gate. First argument is the control qubit.'''
