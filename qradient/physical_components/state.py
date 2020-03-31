@@ -193,7 +193,7 @@ class State:
         for i in range(self.__qnum):
             for j in range(self.__qnum):
                 if which[i, j]:
-                    self.__cnots[i, j] = _cnot(i, j)
+                    self.__cnots[i, j] = self.__cnot(i, j)
 
     def cnot(self, i, j):
         self.vec = self.__cnots[i, j].dot(self.vec)
@@ -224,7 +224,7 @@ class State:
         for i in range(self.__qnum):
             for j in range(self.__qnum):
                 if which[i, j]:
-                    cnots[i, j] = _cnot(i, j)
+                    cnots[i, j] = self.__cnot(i, j)
         # multiply them
         id = sp.identity(2**self.__qnum, dtype='complex', format='csr')
         self.__cnot_ladder = np.array([id.copy(), id.copy()])
