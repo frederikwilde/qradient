@@ -1,5 +1,4 @@
 import scipy.sparse as sp
-import scipy.sparse.linalg as lg
 import numpy as np
 import warnings
 kr = sp.kron
