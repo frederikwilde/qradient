@@ -3,7 +3,6 @@ import numpy as np
 import warnings
 
 
-
 class State:
     '''
     Objects of this type can contain up to three attributes. A state vector
@@ -30,36 +29,45 @@ class State:
             A center matrix, where gates are applied on both sides
             simultaneously.
     '''
+
     def __init__(self, qubit_number, ini='0'):
         self.__qnum = qubit_number
         self.__ini = ini
         self.reset() # initialization of the state vector
 
     def activate_lefthandside(self):
-        '''Initializes the left-hand-side attribute.
-        If the attribute is already loaded, this call is ignored.'''
+        '''
+        Initializes the left-hand-side attribute.
+        If the attribute is already loaded, this call is ignored.
+        '''
         if not hasattr(self, 'lhs'):
             self.lhs = sp.identity(2**self.__qnum, dtype='complex', format='csr')
 
     def activate_center_matrix(self):
-        '''Initializes the center-matrix to an empty matrix.
+        '''
+        Initializes the center-matrix to an empty matrix.
         Use set_center_matrix to fill it.
-        If the attribute is already loaded, this call is ignored.'''
+        If the attribute is already loaded, this call is ignored.
+        '''
         if not hasattr(self, 'center_matrix'):
             self.center_matrix = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
             self.__center_matrix_ini = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
 
     def set_center_matrix(self, matrix):
-        '''Updates the center-matrix (if activated) to matrix.
-        Also stores the matrix for the reset method.'''
+        '''
+        Updates the center-matrix (if activated) to matrix.
+        Also stores the matrix for the reset method.
+        '''
         if not hasattr(self, 'center_matrix'):
             raise AttributeError('center_matrix is not initialized yet.')
         self.center_matrix = matrix.copy()
         self.__center_matrix_ini = matrix.copy()
 
     def reset(self):
-        '''Resets the state vector and left-hand-side and center matrix, if
-        they are activated.'''
+        '''
+        Resets the state vector and left-hand-side and center matrix, if
+        they are activated.
+        '''
         # reset vec
         if self.__ini == '0':
             self.vec = np.zeros(2**self.__qnum, dtype='complex')
@@ -182,7 +190,8 @@ class State:
     ############################################################################
     # CNOTs
     def load_cnots(self, which):
-        '''Adds CNOT gates into memory.
+        '''
+        Adds CNOT gates into memory.
 
         Args:
             which (array[bool]): qnum by qnum matrix which specifies which CNOTs to add.
@@ -240,7 +249,8 @@ class State:
             self.__cnot_ladder[1] = self.__cnot_ladder[1].dot(cnots[i, (i+1) % self.__qnum])
 
     def cnot_ladder(self, stacking):
-        '''Applies a one-dimensional ladder of CNOT gates
+        '''
+        Applies a one-dimensional ladder of CNOT gates
 
         Args:
             stacking (int): The even to uneven qubits are coupled first (i.e. 0-1,
@@ -258,7 +268,8 @@ class State:
     ############################################################################
     # classical Hamiltonian
     def load_classical_ham(self, observable, include_individual_components=False):
-        '''Creates a the full vector representing an observable, that is purely classical.
+        '''
+        Creates a the full vector representing an observable, that is purely classical.
 
         Args:
             observable (Observable): An observable object.

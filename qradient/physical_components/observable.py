@@ -3,26 +3,29 @@ import numpy as np
 import warnings
 kr = sp.kron
 
+
 class Observable:
+    '''
+    Takes a dictionary specifying the observable and builds the matrix.
+
+    Args:
+        observable (dict): can contain the following fields:
+            'x': a 1d-array of prefactors for single-qubit Pauli X. Choose None
+                for no matrix.
+            'y': 1d-array for Pauli Y.
+            'z': 1d-array for Pauli Z.
+            'zz': a 2d-array as upper triangular matrix for two-qubit ZZ terms.
+
+    Attributes:
+        dict (dict): The original observable dictionary.
+        matrix (scipy.sparse.csr_matrix): The full matrix (in sparse format).
+        component_array (np.ndarray[scipy.sparse.csr_matrix]):
+            Full matrices corresponding to the individual components.
+        component_weights (np.ndarray[np.float64]):
+            The weights for each component in component_array.
+    '''
+
     def __init__(self, observable):
-        '''Takes a dictionary specifying the observable and builds the matrix.
-
-        Args:
-            observable (dict): can contain the following fields:
-                'x': a 1d-array of prefactors for single-qubit Pauli X. Choose None
-                    for no matrix.
-                'y': 1d-array for Pauli Y.
-                'z': 1d-array for Pauli Z.
-                'zz': a 2d-array as upper triangular matrix for two-qubit ZZ terms.
-
-        Attributes:
-            dict (dict): The original observable dictionary.
-            matrix (scipy.sparse.csr_matrix): The full matrix (in sparse format).
-            component_array (np.ndarray[scipy.sparse.csr_matrix]):
-                Full matrices corresponding to the individual components.
-            component_weights (np.ndarray[np.float64]):
-                The weights for each component in component_array.
-        '''
         self.__qnum = next(iter(observable.values())).shape[0]
         for v in observable.values():
             for s in v.shape:
@@ -189,6 +192,7 @@ class Projector:
             return self.array * vec
         else:
             return self.array.dot(vec)
+
 
 def _weight_check(weight, observable_component):
     '''
