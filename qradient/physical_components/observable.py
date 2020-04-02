@@ -1,7 +1,6 @@
 import scipy.sparse as sp
 import numpy as np
 import warnings
-kr = sp.kron
 
 
 class Observable:
@@ -48,7 +47,7 @@ class Observable:
                 for i, weight in enumerate(self.dict[identifier]):
                     if weight != None:
                         _weight_check(weight, identifier)
-                        op = kr(kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
+                        op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
                         self.matrix += weight * op
         # two-qubit components
         if 'zz' in self.dict:
@@ -63,8 +62,8 @@ class Observable:
                 for j in range(i+1, self.__qnum):
                     if self.dict['zz'][i, j] != None:
                         _weight_check(self.dict['zz'][i, j], 'y')
-                        op = kr(kr(sp.identity(2**i), _z), _id(2**(j-i-1)))
-                        op = kr(kr(op, _z), _id(2**(self.__qnum-j-1)))
+                        op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
+                        op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                         self.matrix += self.dict['zz'][i, j] * op
 
     def load_components(self):
@@ -78,7 +77,7 @@ class Observable:
                 for i, weight in enumerate(self.dict[identifier]):
                     if weight != None:
                         _weight_check(weight, identifier)
-                        op = kr(kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
+                        op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
                         component_list.append(op)
                         component_weights.append(weight)
         # two-qubit components
@@ -94,8 +93,8 @@ class Observable:
                 for j in range(i+1, self.__qnum):
                     if self.dict['zz'][i, j] != None:
                         _weight_check(self.dict['zz'][i, j], 'y')
-                        op = kr(kr(sp.identity(2**i), _z), _id(2**(j-i-1)))
-                        op = kr(kr(op, _z), _id(2**(self.__qnum-j-1)))
+                        op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
+                        op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                         component_list.append(op)
                         component_weights.append(self.dict['zz'][i, j])
         self.component_array = np.array(component_list)
@@ -103,33 +102,40 @@ class Observable:
         weight_normalization = np.sum(component_weights)
         self.weight_distribution = np.array(component_weights)/weight_normalization
 
-    def load_projectors(self):
-        if self.has_loaded_projectors: # in case the caller has not checked
-            return None
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
-        # construct pauli projectors
-        projectors = []
-        projector_weights = []
-        Projector.set_qnum(self.__qnum)
-        for identifier in ['x', 'y', 'z']:
-            if identifier in self.info:
+    def projectors(self):
+        '''Returns the projectors corresponding to the observable components.'''
+        self.check_observable(['x', 'y', 'z', 'zz'])
+        if not hasattr(self, '__projectors'):
+            # construct pauli projectors
+            projectors = []
+            projector_weights = []
+            for identifier in ['x', 'y', 'z']:
+                if identifier in self.dict:
+                    for i in range(self.__qnum):
+                        if self.dict[identifier][i] != None:
+                            projectors.append(_create_projector(identifier, self.__qnum, i))
+                            projector_weights.append(self.dict[identifier][i])
+            if 'zz' in self.dict:
                 for i in range(self.__qnum):
-                    if self.info[identifier][i] != None:
-                        projectors.append(Projector(identifier, i))
-                        projector_weights.append(self.info[identifier][i])
-        if 'zz' in self.info:
-            for i in range(self.__qnum):
-                for j in range(self.__qnum):
-                    if self.info['zz'][i, j] != None:
-                        projectors.append(Projector('zz', i, j))
-                        projector_weights.append(self.info['zz'][i, j])
-        self.projectors = np.array(projectors)
-        self.projector_weights = np.array(projector_weights)
-        self.has_loaded_projectors = True
+                    for j in range(self.__qnum):
+                        if self.dict['zz'][i, j] != None:
+                            projectors.append(_create_projector('zz', self.__qnum, i, j))
+                            projector_weights.append(self.dict['zz'][i, j])
+            self.__projectors = np.array(projectors)
+            self.__projector_weights = np.array(projector_weights)
+        return self.__projectors, self.__projector_weights
 
     def check_observable(self, known_keys, warning=None):
-        '''Tests whether observable only contains known keys and throws a warning otherwise.'''
-        for key in list(self.info.keys()):
+        '''
+        Tests whether observable only contains known keys and throws a warning otherwise.
+
+        Args:
+            known_keys(list[str]):
+                Keys of components that the caller is able to process.
+            warning(str):
+                Warning message in case unknown keys are present.
+        '''
+        for key in list(self.dict.keys()):
             unknown = True
             for k in known_keys:
                 if key == k:
@@ -140,58 +146,59 @@ class Observable:
                 else:
                     warnings.warn(warning)
 
-class Projector:
-    def __init__(self, key, *args):
-        if key == 'x':
-            self.is_classical = False
-            i = args[0]
-            x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex') # projects on the +1 subspace
-            id1 = sp.identity(2**i, dtype='complex')
-            id2 = sp.identity(2**(Projector.qnum-i-1), dtype='complex')
-            self.array = kr(id1, kr(x_proj_pos, id2), format='csr')
-        elif key == 'y':
-            self.is_classical = False
-            i = args[0]
-            y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex') # projects on the +1 subspace
-            id1 = sp.identity(2**i, dtype='complex')
-            id2 = sp.identity(2**(Projector.qnum-i-1), dtype='complex')
-            self.array = kr(id1, kr(y_proj_pos, id2), format='csr')
-        elif key == 'z':
-            self.is_classical = True
-            i = args[0]
-            z_proj_pos = np.array([1, 0], dtype='complex') # projects on the +1 subspace
-            id1 = np.ones(2**i, dtype='complex')
-            id2 = np.ones(2**(Projector.qnum-i-1), dtype='complex')
-            self.array = np.kron(id1, np.kron(z_proj_pos, id2))
-        elif key == 'zz':
-            self.is_classical = True
-            i, j = args[0], args[1]
-            z_proj_pos = np.array([1, 0], dtype='complex') # projects on the +1 subspace
-            z_proj_neg = np.array([0, 1], dtype='complex') # projects on the -1 subspace
-            id1 = np.ones(2**i, dtype='complex')
-            id2 = np.ones(2**(Projector.qnum-i-1), dtype='complex')
-            id3 = np.ones(2**(j-i-1), dtype='complex')
-            id4 = np.ones(2**(Projector.qnum-j-1), dtype='complex')
-            upup = np.kron(
-                id1,
-                np.kron(z_proj_pos, np.kron(id3, np.kron(z_proj_pos, id4)))
-            )
-            downdown = np.kron(
-                id1,
-                np.kron(z_proj_neg, np.kron(id3, np.kron(z_proj_neg, id4)))
-            )
-            self.array = upup + downdown
-        else:
-            raise ValueError('Unknown key for projector {}.'.format(key))
 
-    def set_qnum(qnum):
-        Projector.qnum = qnum
+def _create_projector(self, key, qnum, *args):
+    '''
+    Creates a projector matrix.
 
-    def dot(self, vec):
-        if self.is_classical:
-            return self.array * vec
-        else:
-            return self.array.dot(vec)
+    Args:
+        key (str): The type of projector.
+        qnum (int): The system size.
+        *args (int): Index or indecies denoting the support of the projector.
+
+    Returns:
+        scipy.sparse.spmatrix: The projector, either in 'dia' or 'csr' format.
+
+    Raises:
+        ValueError: If the key is not known.
+    '''
+    if key == 'x':
+        i = args[0]
+        x_proj_pos = sp.csr_matrix([[.5, .5], [.5, .5]], dtype='complex')  # projects on the +1 subspace
+        id1 = _id(2**i, dtype='complex')
+        id2 = _id(2**(qnum-i-1), dtype='complex')
+        return _kr(id1, _kr(x_proj_pos, id2), format='csr')
+    elif key == 'y':
+        i = args[0]
+        y_proj_pos = sp.csr_matrix([[.5, -.5j], [.5j, .5]], dtype='complex')  # projects on the +1 subspace
+        id1 = _id(2**i, dtype='complex')
+        id2 = _id(2**(qnum-i-1), dtype='complex')
+        return _kr(id1, _kr(y_proj_pos, id2), format='csr')
+    elif key == 'z':
+        i = args[0]
+        z_proj_pos = np.array([1, 0], dtype='complex')  # projects on the +1 subspace
+        id1 = np.ones(2**i, dtype='complex')
+        id2 = np.ones(2**(qnum-i-1), dtype='complex')
+        return sp.diags(np.kron(id1, np.kron(z_proj_pos, id2)), dtype='complex')
+    elif key == 'zz':
+        i, j = args[0], args[1]
+        z_proj_pos = np.array([1, 0], dtype='complex')  # projects on the +1 subspace
+        z_proj_neg = np.array([0, 1], dtype='complex')  # projects on the -1 subspace
+        id1 = np.ones(2**i, dtype='complex')
+        id2 = np.ones(2**(qnum-i-1), dtype='complex')
+        id3 = np.ones(2**(j-i-1), dtype='complex')
+        id4 = np.ones(2**(qnum-j-1), dtype='complex')
+        upup = np.kron(
+            id1,
+            np.kron(z_proj_pos, np.kron(id3, np.kron(z_proj_pos, id4)))
+        )
+        downdown = np.kron(
+            id1,
+            np.kron(z_proj_neg, np.kron(id3, np.kron(z_proj_neg, id4)))
+        )
+        return sp.diags(upup + downdown, dtype='complex')
+    else:
+        raise ValueError('Unknown key for projector {}.'.format(key))
 
 
 def _weight_check(weight, observable_component):
@@ -208,7 +215,9 @@ def _weight_check(weight, observable_component):
             ' If you dont\'t want to include it, set it to None.'
         ))
 
-_id = lambda i: sp.identity(2**i, dtype='complex', format='coo')
+
+_kr = sp.kron
+_id = lambda i: _id(2**i, dtype='complex', format='coo')
 _x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
 _y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
 _z = sp.csr_matrix([[1., 0.], [0., -1.]], dtype='complex')
