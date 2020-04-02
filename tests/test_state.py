@@ -1,5 +1,4 @@
-def test_test():
-    assert 2 + 2 == 4
+from qradient.physical_components import State
 
-def test_testfail():
-    assert 2 == 3
+def test_state():
+    State(2)
