@@ -1,4 +1,5 @@
 import scipy.sparse as sp
+from scipy import stats
 import numpy as np
 import warnings
 
@@ -17,11 +18,23 @@ class Observable:
 
     Attributes:
         dict (dict): The original observable dictionary.
+        component_number (int):
+            Number of components, i.e. non-zero entries in dict.
         matrix (scipy.sparse.csr_matrix): The full matrix (in sparse format).
-        component_array (np.ndarray[scipy.sparse.csr_matrix]):
+
+        ### attributes below need to be loaded with respective methods ###
+        components (np.ndarray[scipy.sparse.csr_matrix]):
             Full matrices corresponding to the individual components.
         component_weights (np.ndarray[np.float64]):
             The weights for each component in component_array.
+        component_distribution (np.ndarray[np.float64]):
+            The absolute value of component_weights normalized to unit 1-norm.
+        projectors (np.ndarray[scipy.sparse.spmatrix]):
+            Projectors on the +1 eigenspace of the individual components.
+        projector_weights (np.ndarray[np.float64]):
+            Weights of the projectors, identical with component_weights.
+        projector_distribution (np.ndarray[np.float64]):
+            The absolute value of projector_weights normalized to unit 1-norm.
     '''
 
     def __init__(self, observable):
@@ -41,6 +54,7 @@ class Observable:
 
     def __load_matrix(self):
         self.matrix = sp.coo_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex').asformat('csr')
+        self.component_number = 0
         # single-qubit components
         for identifier, matrix in [('x', _x), ('y', _y), ('z', _z)]:
             if identifier in self.dict:
@@ -49,6 +63,7 @@ class Observable:
                         _weight_check(weight, identifier)
                         op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
                         self.matrix += weight * op
+                        self.component_number += 1
         # two-qubit components
         if 'zz' in self.dict:
             for i in range(self.__qnum):
@@ -65,6 +80,7 @@ class Observable:
                         op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
                         op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                         self.matrix += self.dict['zz'][i, j] * op
+                        self.component_number += 1
 
     def load_components(self):
         '''
@@ -74,8 +90,7 @@ class Observable:
             components (np.ndarray[scipy.sparse.csr_matrix])
             component_weights (np.ndarray[np.float64])
             component_distribution (np.ndarray[np.float64]):
-                Absolute values of component_weights and its 1-norm is
-                normalized to one.
+                Absolute values of component_weights normalized to unit 1-norm.
 
         Does nothing if the components are already loaded.
         '''
@@ -123,8 +138,7 @@ class Observable:
             projectors (np.ndarray[scipy.sparse.spmatrix])
             projector_weights (np.ndarray[np.float64])
             projector_distribution (np.ndarray[np.float64]):
-                The absolute value of projector_weights with its 1-norm
-                normalized to one.
+                The absolute value of projector_weights normalized to unit 1-norm.
 
         Does nothing if they have been loaded already.
         '''
@@ -151,6 +165,54 @@ class Observable:
             self.projector_weights = np.array(projector_weights)
             weight_normalization = np.sum(np.abs(projector_weights))
             self.projector_distribution = np.array(np.abs(projector_weights))/weight_normalization
+
+    def expectation_value(self, vec, shot_num=0, component=-1):
+        '''
+        Computes the expectation value of the observable with respect to the
+        observable or one of its components.
+
+        Args:
+            vec (np.ndarray[np.complex128]): State vector.
+            shot_num (int):
+                Number of measurements to estimate the expectation value.
+                Default is 0, which means infinite shots (i.e.) the exact
+                expectation value
+            component (int):
+                If set to a non-negative integer i smaller than the number of
+                components the expectation value is evaluated with respect to
+                the the i-th component in the components array (including the
+                component weight).
+                The default value is -1 which evaluates the expectation value
+                with respec to the entire observable.
+
+        Returns:
+            np.float64: The expectation value or the estimation thereof.
+        '''
+        if shot_num == 0:
+            if component < 0:  # expectation value w.r.t. entire observable
+                return vec.conj().dot(self.matrix.dot(vec)).real
+            else:  # expectation value w.r.t. sepecific component
+                self.load_components()
+                return self.component_weights * vec.conj().dot(
+                    self.components[component].dot(vec)
+                ).real
+        else:
+            self.load_projectors()
+            if component < 0:  # expectation value w.r.t. entire observable
+                expec_val = 0.
+                for i, proj in np.ndenumerate(self.projectors):
+                    prob = (np.abs(proj.dot(vec))**2).sum()
+                    weight = self.projector_weights[i]
+                    rnd_var = stats.rv_discrete(values=([0, 1], [prob, 1-prob]))
+                    samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
+                    expec_val += samples.mean()
+                return expec_val
+            else:  # expectation value w.r.t. sepecific component
+                prob = (np.abs(self.projectors[component].dot(vec))**2).sum()
+                weight = self.projector_weights[component]
+                rnd_var = stats.rv_discrete(values=([0, 1], [prob, 1-prob]))
+                samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
+                return samples.mean()
 
     def check_observable(self, known_keys, warning=None):
         '''
