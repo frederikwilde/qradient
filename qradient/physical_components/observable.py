@@ -7,6 +7,7 @@ import warnings
 class Observable:
     '''
     Takes a dictionary specifying the observable and builds the matrix.
+    *** Sentence about active_component attribute ***
 
     Args:
         observable (dict): can contain the following fields:
@@ -41,7 +42,10 @@ class Observable:
     '''
 
     def __init__(self, observable):
+        self.dict = observable
         self.__qnum = next(iter(observable.values())).shape[0]
+        # Check that observable dict contains only valid keys and has consistent shapes.
+        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
         for v in observable.values():
             for s in v.shape:
                 if s != self.__qnum:
@@ -49,11 +53,17 @@ class Observable:
                         'Inconsistent shapes in observable dictionary.',
                         'Cannot infer qubit_number.'
                     ))
-
         # load observable
-        self.dict = observable
-        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
         self.__load_matrix()
+        # check whether it is classical. Used by exp_dot and sparse methods
+        is_classical = True
+        for key in list(self.dict.keys()):
+            if key not in ['z', 'zz']:
+                is_classical = False
+        self.__is_classical = is_classical
+        if self.__is_classical:
+            self.matrix = self.matrix.asformat('dia')
+        # active component flag
         self.active_component = -1
         '''
         Indicator which component will be used in expectation_value.
@@ -133,6 +143,9 @@ class Observable:
                             op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                             component_list.append(op)
                             component_weights.append(self.dict['zz'][i, j])
+            if self.__is_classical:
+                for i, c in enumerate(component_list):
+                    component_list[i] = c.asformat('dia')
             self.components = np.array(component_list)
             self.component_weights = np.array(component_weights)
             weight_normalization = np.sum(np.abs(component_weights))
@@ -228,7 +241,7 @@ class Observable:
         '''
         Multiplies the array (vector or matrix) with the active component as
         specified in the active_component attribute (-1 implies all components
-        are active.
+        are active).
 
         Args:
             array (np.ndarray): Input array.
@@ -246,6 +259,42 @@ class Observable:
                 'Invalid active_component attribute: {}'.format(self.active_component)
             )
 
+    def exp_dot(self, angle, array):
+        '''
+        Multiplies the active_component of observable with -1.j*angle and
+        applies its exponential with array.
+
+        Only implemented for classical
+        Observable (otherwise expoentiation is generically expensive).
+
+        Args:
+            angle (np.float64): Rotation angle.
+            array (np.ndarray): Vector or matrix.
+
+        Returns:
+            np.ndarray: Of same shape as input array.
+        '''
+        if not self.__is_classical:
+            raise AttributeError('exp_dot is only implemented for classical observables.')
+        if self.active_component == -1:
+            if array.ndim == 1:
+                return np.exp(-1.j * angle * self.matrix.data) * array
+            else:
+                return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array)
+        elif self.active_component > -1:
+            self.load_components()
+            if array.ndim == 1:
+                return np.exp(
+                    -1.j * angle * self.component_weights[self.active_component] * \
+                        self.components[self.active_component].data
+                ) * array
+            else:
+                return sp.diags(np.exp(
+                    -1.j * angle * self.component_weights[self.active_component] * \
+                        self.components[self.active_component].data
+                )).dot(array)
+        else:
+            raise ValueError('active_component attribute invalid: {}'.format(self.active_component))
 
     def __check_observable(self, known_keys, warning=None):
         '''
