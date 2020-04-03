@@ -49,8 +49,13 @@ class Observable:
 
         # load observable
         self.dict = observable
-        self.check_observable(known_keys=['x', 'y', 'z', 'zz'])
+        self.__check_observable(known_keys=['x', 'y', 'z', 'zz'])
         self.__load_matrix()
+        self.active_component = -1
+        '''
+        Indicator which component will be used in expectation_value.
+        If set to -1, the entire matrix (or all components) will be used.
+        '''
 
     def __load_matrix(self):
         self.matrix = sp.coo_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex').asformat('csr')
@@ -142,7 +147,7 @@ class Observable:
 
         Does nothing if they have been loaded already.
         '''
-        self.check_observable(['x', 'y', 'z', 'zz'])
+        self.__check_observable(['x', 'y', 'z', 'zz'])
         if hasattr(self, 'projectors'):
             pass
         else:
@@ -166,7 +171,7 @@ class Observable:
             weight_normalization = np.sum(np.abs(projector_weights))
             self.projector_distribution = np.array(np.abs(projector_weights))/weight_normalization
 
-    def expectation_value(self, vec, shot_num=0, component=-1):
+    def expectation_value(self, vec, shot_num=0):
         '''
         Computes the expectation value of the observable with respect to the
         observable or one of its components.
@@ -177,28 +182,25 @@ class Observable:
                 Number of measurements to estimate the expectation value.
                 Default is 0, which means infinite shots (i.e.) the exact
                 expectation value
-            component (int):
-                If set to a non-negative integer i smaller than the number of
-                components the expectation value is evaluated with respect to
-                the the i-th component in the components array (including the
-                component weight).
-                The default value is -1 which evaluates the expectation value
-                with respec to the entire observable.
 
         Returns:
             np.float64: The expectation value or the estimation thereof.
         '''
         if shot_num == 0:
-            if component < 0:  # expectation value w.r.t. entire observable
+            if self.active_component == -1:  # expectation value w.r.t. entire observable
                 return vec.conj().dot(self.matrix.dot(vec)).real
-            else:  # expectation value w.r.t. sepecific component
+            elif self.active_component > -1:  # expectation value w.r.t. sepecific component
                 self.load_components()
                 return self.component_weights * vec.conj().dot(
-                    self.components[component].dot(vec)
+                    self.components[self.active_component].dot(vec)
                 ).real
+            else:
+                raise ValueError(
+                    'Invalid active_component attribute: {}'.format(self.active_component)
+                )
         else:
             self.load_projectors()
-            if component < 0:  # expectation value w.r.t. entire observable
+            if self.active_component == -1:  # expectation value w.r.t. entire observable
                 expec_val = 0.
                 for i, proj in np.ndenumerate(self.projectors):
                     prob = (np.abs(proj.dot(vec))**2).sum()
@@ -207,14 +209,41 @@ class Observable:
                     samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
                     expec_val += samples.mean()
                 return expec_val
-            else:  # expectation value w.r.t. sepecific component
-                prob = (np.abs(self.projectors[component].dot(vec))**2).sum()
-                weight = self.projector_weights[component]
+            elif self.active_component > -1:  # expectation value w.r.t. sepecific component
+                prob = (np.abs(self.projectors[self.active_component].dot(vec))**2).sum()
+                weight = self.projector_weights[self.active_component]
                 rnd_var = stats.rv_discrete(values=([0, 1], [prob, 1-prob]))
                 samples = np.array([weight, -weight])[rnd_var.rvs(size=shot_num)]
                 return samples.mean()
+            else:
+                raise ValueError(
+                    'Invalid active_component attribute: {}'.format(self.active_component)
+                )
 
-    def check_observable(self, known_keys, warning=None):
+    def dot(self, array):
+        '''
+        Multiplies the array (vector or matrix) with the active component as
+        specified in the active_component attribute (-1 implies all components
+        are active.
+
+        Args:
+            array (np.ndarray): Input array.
+
+        Returns:
+            np.ndarray: Of the same shape as input.
+        '''
+        if self.active_component == -1:
+            return self.matrix.dot(array)
+        elif self.active_component > -1:
+            self.load_components()
+            return self.component_weights * self.components[self.active_component].dot(array)
+        else:
+            raise ValueError(
+                'Invalid active_component attribute: {}'.format(self.active_component)
+            )
+
+
+    def __check_observable(self, known_keys, warning=None):
         '''
         Tests whether observable only contains known keys and throws a warning otherwise.
 

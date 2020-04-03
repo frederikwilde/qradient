@@ -56,7 +56,10 @@ class Qaoa(ParametrizedCircuit):
         self.__state_history[2*self.lnum] = self.state.vec
         # calculate expecation value
         self.state.vec *= self.state.gates.classical_ham
-        expec_val = self.__state_history[2*self.lnum].conj().dot(self.state.vec).real
+        if expec_val_shotnum == 0:
+            expec_val = self.__state_history[2*self.lnum].conj().dot(self.state.vec).real
+        else:
+            expec_val = 
         # calculate gradient
         for i in np.arange(self.lnum-1, -1, -1):
             self.__xrot_all(-betas[i])
