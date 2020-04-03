@@ -67,45 +67,71 @@ class Observable:
                         self.matrix += self.dict['zz'][i, j] * op
 
     def load_components(self):
-        if hasattr(self, 'component_array'):
-            return None
-        component_list = []
-        component_weights = []
-        # single-qubit components
-        for identifier, matrix in [('x', _x), ('y', _y), ('z', _z)]:
-            if identifier in self.dict:
-                for i, weight in enumerate(self.dict[identifier]):
-                    if weight != None:
-                        _weight_check(weight, identifier)
-                        op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
-                        component_list.append(op)
-                        component_weights.append(weight)
-        # two-qubit components
-        if 'zz' in self.dict:
-            for i in range(self.__qnum):
-                for j in range(i+1):
-                    if self.dict['zz'][i, j] != None:
-                        raise ValueError((
-                            'zz of observable should be a upper triangular {} '.format(self.__qnum),
-                            'by {} matrix. Diagonal and lower triangle should'.format(self.__qnum),
-                            'contain None\'s, not {}.'.format(self.dict['zz'][i, j])
-                        ))
-                for j in range(i+1, self.__qnum):
-                    if self.dict['zz'][i, j] != None:
-                        _weight_check(self.dict['zz'][i, j], 'y')
-                        op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
-                        op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
-                        component_list.append(op)
-                        component_weights.append(self.dict['zz'][i, j])
-        self.component_array = np.array(component_list)
-        self.weight_array = np.array(component_weights)
-        weight_normalization = np.sum(component_weights)
-        self.weight_distribution = np.array(component_weights)/weight_normalization
+        '''
+        Loads matrices of the individual components of the observable into
+        the following attributes:
 
-    def projectors(self):
-        '''Returns the projectors corresponding to the observable components.'''
+            components (np.ndarray[scipy.sparse.csr_matrix])
+            component_weights (np.ndarray[np.float64])
+            component_distribution (np.ndarray[np.float64]):
+                Absolute values of component_weights and its 1-norm is
+                normalized to one.
+
+        Does nothing if the components are already loaded.
+        '''
+        if hasattr(self, 'components'):
+            pass
+        else:
+            component_list = []
+            component_weights = []
+            # single-qubit components
+            for identifier, matrix in [('x', _x), ('y', _y), ('z', _z)]:
+                if identifier in self.dict:
+                    for i, weight in enumerate(self.dict[identifier]):
+                        if weight != None:
+                            _weight_check(weight, identifier)
+                            op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
+                            component_list.append(op)
+                            component_weights.append(weight)
+            # two-qubit components
+            if 'zz' in self.dict:
+                for i in range(self.__qnum):
+                    for j in range(i+1):
+                        if self.dict['zz'][i, j] != None:
+                            raise ValueError((
+                                'zz of observable should be a upper triangular {} '.format(self.__qnum),
+                                'by {} matrix. Diagonal and lower triangle should'.format(self.__qnum),
+                                'contain None\'s, not {}.'.format(self.dict['zz'][i, j])
+                            ))
+                    for j in range(i+1, self.__qnum):
+                        if self.dict['zz'][i, j] != None:
+                            _weight_check(self.dict['zz'][i, j], 'y')
+                            op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
+                            op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
+                            component_list.append(op)
+                            component_weights.append(self.dict['zz'][i, j])
+            self.components = np.array(component_list)
+            self.component_weights = np.array(component_weights)
+            weight_normalization = np.sum(np.abs(component_weights))
+            self.component_distribution = np.array(np.abs(component_weights))/weight_normalization
+
+    def load_projectors(self):
+        '''
+        Loads projectors corresponding to the observable components into the
+        following attributes:
+
+            projectors (np.ndarray[scipy.sparse.spmatrix])
+            projector_weights (np.ndarray[np.float64])
+            projector_distribution (np.ndarray[np.float64]):
+                The absolute value of projector_weights with its 1-norm
+                normalized to one.
+
+        Does nothing if they have been loaded already.
+        '''
         self.check_observable(['x', 'y', 'z', 'zz'])
-        if not hasattr(self, '__projectors'):
+        if hasattr(self, 'projectors'):
+            pass
+        else:
             # construct pauli projectors
             projectors = []
             projector_weights = []
@@ -121,9 +147,10 @@ class Observable:
                         if self.dict['zz'][i, j] != None:
                             projectors.append(_create_projector('zz', self.__qnum, i, j))
                             projector_weights.append(self.dict['zz'][i, j])
-            self.__projectors = np.array(projectors)
-            self.__projector_weights = np.array(projector_weights)
-        return self.__projectors, self.__projector_weights
+            self.projectors = np.array(projectors)
+            self.projector_weights = np.array(projector_weights)
+            weight_normalization = np.sum(np.abs(projector_weights))
+            self.projector_distribution = np.array(np.abs(projector_weights))/weight_normalization
 
     def check_observable(self, known_keys, warning=None):
         '''

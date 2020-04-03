@@ -1,7 +1,6 @@
 from qradient.physical_components import State, Observable
 import numpy as np
 from scipy import stats
-from tqdm import tnrange
 import warnings
 
 class ParametrizedCircuit:
@@ -47,12 +46,3 @@ class ParametrizedCircuit:
 
     # To do: add here another method which is similar to sample_expec_val, but doesnt loop through all projectors
     # ideally, this method should just sample the projectors corresponding to a particular observable
-
-def progbar_range(hide_progbar):
-    '''Reduces code by returning a regular range or a tnrange.
-
-    A tnrange displays a progress bar while executing.'''
-    if hide_progbar:
-        return np.arange
-    else:
-        return tnrange
