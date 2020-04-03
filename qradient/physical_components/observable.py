@@ -174,7 +174,8 @@ class Observable:
     def expectation_value(self, vec, shot_num=0):
         '''
         Computes the expectation value of the observable with respect to the
-        observable or one of its components.
+        observable or one of its component, which is decided by the
+        active_component attribute.
 
         Args:
             vec (np.ndarray[np.complex128]): State vector.
