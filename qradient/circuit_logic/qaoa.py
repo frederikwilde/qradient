@@ -28,12 +28,12 @@ class Qaoa(ParametrizedCircuit):
         if save_history:
             for i in np.arange(self.lnum):
                 self.__state_history[2*i] = self.state.vec
-                self.state.exp_ham_classical(gammas[i])
+                self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
                 self.__state_history[2*i+1] = self.state.vec
                 self.__allxrot(betas[i])
         else:
             for i in np.arange(self.lnum):
-                self.state.exp_ham_classical(gammas[i])
+                self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
                 self.state.__allxrot(betas[i])
 
     def run(self, betas, gammas, shot_num=0):
@@ -48,6 +48,22 @@ class Qaoa(ParametrizedCircuit):
         return self.observable.expectation_value(self.state.vec, shot_num=shot_num)
 
     def gradient(self, betas, gammas, expec_val_shotnum=0):
+        '''
+        Computes the exact gradient with respect to observable (and its
+        internal active_component). Also returns the expectation value which can
+        be exact or stochastic.
+
+        Args:
+            betas (np.ndarray[np.float64]): Beta parameters.
+            gammas (np.ndarray[np.float64]): Gamma parameters.
+            expec_val_shotnum (int):
+                Number of shots used to estimate the expectation value. Default
+                is 0, which gives the exact expectation value.
+
+        Returns:
+            np.float64: The expectation value
+            np.ndarray[np.float64]: The exact gradient.
+        '''
         self.state.reset()
         self.__check_parameters(betas, gammas)
         grad = np.ndarray([self.lnum, 2], dtype='double')
@@ -55,23 +71,26 @@ class Qaoa(ParametrizedCircuit):
         self.__run(betas, gammas, save_history=True)
         self.__state_history[2*self.lnum] = self.state.vec
         # calculate expecation value
-        self.state.vec *= self.state.gates.classical_ham
+        self.state.vec = self.observable.dot(self.state.vec)
         if expec_val_shotnum == 0:
             expec_val = self.__state_history[2*self.lnum].conj().dot(self.state.vec).real
         else:
-            expec_val = 
+            expec_val = self.observable.expectation_value(
+                self.__state_history[2*self.lnum],
+                shot_num=expec_val_shotnum
+            )
         # calculate gradient
         for i in np.arange(self.lnum-1, -1, -1):
             self.__xrot_all(-betas[i])
-            self.tmp_vec[:] = self.state.vec
-            self.state.x_summed()
+            self.__tmp_vec[:] = self.state.vec
+            self.state.allx()
             grad[i, 0] = -2. * self.__state_history[2*i+1].conj().dot(self.state.vec).real
-            self.state.vec[:] = self.tmp_vec
-            self.state.exp_ham_classical(-gammas[i])
-            self.tmp_vec[:] = self.state.vec
-            self.state.ham_classical()
+            self.state.vec[:] = self.__tmp_vec
+            self.state.vec = self.observable.exp_dot(-gammas[i], self.state.vec)
+            self.__tmp_vec[:] = self.state.vec
+            self.state.vec = self.observable.dot(-1.j * self.state.vec)
             grad[i, 1] = -2. * self.__state_history[2*i].conj().dot(self.state.vec).real
-            self.state.vec[:] = self.tmp_vec
+            self.state.vec[:] = self.__tmp_vec
         return expec_val, grad
 
     def sample_grad(
