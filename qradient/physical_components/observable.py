@@ -21,6 +21,9 @@ class Observable:
         component_number (int):
             Number of components, i.e. non-zero entries in dict.
         matrix (scipy.sparse.csr_matrix): The full matrix (in sparse format).
+        active_component (int):
+            Decides whether the expectation_value and dot method use the entire
+            observable (if set to -1) or only one component. Default is -1.
 
         ### attributes below need to be loaded with respective methods ###
         components (np.ndarray[scipy.sparse.csr_matrix]):
