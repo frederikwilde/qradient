@@ -59,7 +59,7 @@ class Observable:
         for identifier, matrix in [('x', _x), ('y', _y), ('z', _z)]:
             if identifier in self.dict:
                 for i, weight in enumerate(self.dict[identifier]):
-                    if weight != None:
+                    if weight is not None:
                         _weight_check(weight, identifier)
                         op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
                         self.matrix += weight * op
@@ -68,14 +68,14 @@ class Observable:
         if 'zz' in self.dict:
             for i in range(self.__qnum):
                 for j in range(i+1):
-                    if self.dict['zz'][i, j] != None:
+                    if self.dict['zz'][i, j] is not None:
                         raise ValueError((
                             'zz of observable should be a upper triangular {} '.format(self.__qnum),
                             'by {} matrix. Diagonal and lower triangle should'.format(self.__qnum),
                             'contain None\'s, not {}.'.format(self.dict['zz'][i, j])
                         ))
                 for j in range(i+1, self.__qnum):
-                    if self.dict['zz'][i, j] != None:
+                    if self.dict['zz'][i, j] is not None:
                         _weight_check(self.dict['zz'][i, j], 'y')
                         op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
                         op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
@@ -103,7 +103,7 @@ class Observable:
             for identifier, matrix in [('x', _x), ('y', _y), ('z', _z)]:
                 if identifier in self.dict:
                     for i, weight in enumerate(self.dict[identifier]):
-                        if weight != None:
+                        if weight is not None:
                             _weight_check(weight, identifier)
                             op = _kr(_kr(_id(2**i), matrix), _id(2**(self.__qnum-i-1)))
                             component_list.append(op)
@@ -112,14 +112,14 @@ class Observable:
             if 'zz' in self.dict:
                 for i in range(self.__qnum):
                     for j in range(i+1):
-                        if self.dict['zz'][i, j] != None:
+                        if self.dict['zz'][i, j] is not None:
                             raise ValueError((
                                 'zz of observable should be a upper triangular {} '.format(self.__qnum),
                                 'by {} matrix. Diagonal and lower triangle should'.format(self.__qnum),
                                 'contain None\'s, not {}.'.format(self.dict['zz'][i, j])
                             ))
                     for j in range(i+1, self.__qnum):
-                        if self.dict['zz'][i, j] != None:
+                        if self.dict['zz'][i, j] is not None:
                             _weight_check(self.dict['zz'][i, j], 'y')
                             op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
                             op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
@@ -152,13 +152,13 @@ class Observable:
             for identifier in ['x', 'y', 'z']:
                 if identifier in self.dict:
                     for i in range(self.__qnum):
-                        if self.dict[identifier][i] != None:
+                        if self.dict[identifier][i] is not None:
                             projectors.append(_create_projector(identifier, self.__qnum, i))
                             projector_weights.append(self.dict[identifier][i])
             if 'zz' in self.dict:
                 for i in range(self.__qnum):
                     for j in range(self.__qnum):
-                        if self.dict['zz'][i, j] != None:
+                        if self.dict['zz'][i, j] is not None:
                             projectors.append(_create_projector('zz', self.__qnum, i, j))
                             projector_weights.append(self.dict['zz'][i, j])
             self.projectors = np.array(projectors)

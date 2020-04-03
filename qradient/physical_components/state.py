@@ -286,7 +286,7 @@ class State:
         component_list = []
         if 'z' in observable.info:
             for i, weight in enumerate(self.info['z']):
-                if weight != None:
+                if weight is not None:
                     component = weight * _nkr(id(i), _nkr(z, id(self.__qnum-i-1)))
                     self.classical_ham += component
                     if include_individual_components:
@@ -294,7 +294,7 @@ class State:
         if 'zz' in observable.info:
             for i in range(self.__qnum):
                 for j in range(i+1, self.__qnum):
-                    if observable.info['zz'][i, j] != None:
+                    if observable.info['zz'][i, j] is not None:
                         component = observable.info['zz'][i, j] * _nkr(
                             id(i),
                             _nkr(z, _nkr(id(j-i-1), _nkr(z, id(self.__qnum-j-1))))
