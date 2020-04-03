@@ -110,29 +110,29 @@ class State:
         warnings.warn('Not implemented.')
 
     ############################################################################
-    # x rotation with all x (x_1 + x_2 + ...)
-    def load_xrot_all(self):
+    # Multiplication with all x summed, (x_1 + x_2 + ...)
+    def load_allx(self):
         '''All x gates summed up. I.e. -1.j * (x_1 + x_2 + ... + x_qnum).'''
-        temp_xrot = np.ndarray(self.__qnum, dtype=sp.csr_matrix)
+        temp_x = np.ndarray(self.__qnum, dtype=sp.csr_matrix)
         for i in range(self.__qnum):
-            temp_xrot[i] = -1.j * _skr(
+            temp_x[i] = -1.j * _skr(
                 _skr(_id(i), _x),
                 _id(self.__qnum-i-1),
                 format='csr'
             )
-        self.__xrot_all = sp.coo_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex').asformat('csr')
+        self.__allx = sp.coo_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex').asformat('csr')
         for i in range(self.__qnum):
-            self.__xrot_all += .5 * temp_xrot[i]
-        del temp_xrot
+            self.__allx += .5 * temp_x[i]
+        del temp_x
 
-    def xrot_all(self):
+    def allx(self):
         '''Multiply the sum of all x-Paulis (incl. -1.j). For derivatives.'''
         self.vec = self.__xrot_all.dot(self.vec)
 
-    def xrot_all_lhs(self, angle, i):
+    def allx_lhs(self, angle, i):
         warnings.warn('Not implemented.')
 
-    def xrot_all_center_matrix(self, angle, i):
+    def allx_center_matrix(self, angle, i):
         warnings.warn('Not implemented.')
 
     ############################################################################

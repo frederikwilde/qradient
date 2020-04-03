@@ -1,71 +1,73 @@
-from .base import ParametrizedCircuit, progbar_range
-from qradient.physical_components import Gates, State, Observable
+from .base import ParametrizedCircuit
+from qradient.physical_components import State
 import numpy as np
 import scipy.sparse as sp
 from scipy import stats
 import warnings
 
+
 class Qaoa(ParametrizedCircuit):
     def __init__(self, qubit_number, observable, layer_number):
-        ParametrizedCircuit.init(self, qubit_number, observable)
-        self.state.gates = Gates(qubit_number) \
-            .add_xrots() \
-            .add_x_summed() \
-            .add_classical_ham(self.observable, include_individual_components=True)
-            # individul components are used in sample_grad_dense.
-        self.lnum = layer_number
-        self.state.reset('+') # initialize in uniform-superposition state
-        # for calculating the gradient
-        self.state_history = np.ndarray([2*self.lnum+1, 2**self.qnum], dtype='complex')
-        # FLAGS
-        self.has_loaded_eigensystem = False
+        ParametrizedCircuit.init(self, observable)
+        self.state = State(self.__qnum, ini='+')
+        self.state.load_xrots()
+        self.state.load_allx()
+        self.state.load_classical_ham(observable)
+        self.__lnum = layer_number
+        self.__state_history = np.ndarray([2*self.lnum+1, 2**self.qnum], dtype='complex')
 
-    def run_expec_val(self, betas, gammas, hide_progbar=True, exact_expec_val=True, shot_num=1, ini_state=None):
-        '''Runs the circuit and returns the expectation value under observable'''
-        if ini_state is None:
-            self.state.reset()
+    def __allxrot(self, angle):
+        for q in np.arange(self.qnum):
+            self.state.xrot(angle, q)
+
+    def __run(self, betas, gammas, save_history=False):
+        '''
+        Only runs the circuit on the current state and saves to
+        state_history if specified.
+        '''
+        if save_history:
+            for i in np.arange(self.lnum):
+                self.__state_history[2*i] = self.state.vec
+                self.state.exp_ham_classical(gammas[i])
+                self.__state_history[2*i+1] = self.state.vec
+                self.__allxrot(betas[i])
         else:
-            self.state.vec = ini_state
+            for i in np.arange(self.lnum):
+                self.state.exp_ham_classical(gammas[i])
+                self.state.__allxrot(betas[i])
+
+    def run(self, betas, gammas, shot_num=0):
+        '''
+        Runs the circuit and returns the expectation value with respect to
+        the observable.
+        '''
+        self.state.reset()
         self.__check_parameters(betas, gammas)
-        myrange = progbar_range(hide_progbar)
         # run circuit
-        for i in myrange(self.lnum):
-            self.state.exp_ham_classical(gammas[i])
-            self.__xrot_all(betas[i])
-        if exact_expec_val:
-            return self.expec_val()
-        else:
-            return self.sample_expec_val(shot_num)
+        self.__run(betas, gammas)
+        return self.observable.expectation_value(self.state.vec, shot_num=shot_num)
 
-    def grad_run(self, betas, gammas, hide_progbar=True, ini_state=None):
-        if ini_state is None:
-            self.state.reset()
-        else:
-            self.state.vec = ini_state
+    def gradient(self, betas, gammas, expec_val_shotnum=0):
+        self.state.reset()
         self.__check_parameters(betas, gammas)
         grad = np.ndarray([self.lnum, 2], dtype='double')
         # run circuit
-        myrange = progbar_range(hide_progbar)
-        for i in myrange(self.lnum):
-            self.state_history[2*i] = self.state.vec
-            self.state.exp_ham_classical(gammas[i])
-            self.state_history[2*i+1] = self.state.vec
-            self.__xrot_all(betas[i])
-        self.state_history[2*self.lnum] = self.state.vec
+        self.__run(betas, gammas, save_history=True)
+        self.__state_history[2*self.lnum] = self.state.vec
         # calculate expecation value
         self.state.vec *= self.state.gates.classical_ham
-        expec_val = self.state_history[2*self.lnum].conj().dot(self.state.vec).real
+        expec_val = self.__state_history[2*self.lnum].conj().dot(self.state.vec).real
         # calculate gradient
-        for i in myrange(self.lnum-1, -1, -1):
+        for i in np.arange(self.lnum-1, -1, -1):
             self.__xrot_all(-betas[i])
             self.tmp_vec[:] = self.state.vec
             self.state.x_summed()
-            grad[i, 0] = -2. * self.state_history[2*i+1].conj().dot(self.state.vec).real
+            grad[i, 0] = -2. * self.__state_history[2*i+1].conj().dot(self.state.vec).real
             self.state.vec[:] = self.tmp_vec
             self.state.exp_ham_classical(-gammas[i])
             self.tmp_vec[:] = self.state.vec
             self.state.ham_classical()
-            grad[i, 1] = -2. * self.state_history[2*i].conj().dot(self.state.vec).real
+            grad[i, 1] = -2. * self.__state_history[2*i].conj().dot(self.state.vec).real
             self.state.vec[:] = self.tmp_vec
         return expec_val, grad
 
@@ -113,20 +115,20 @@ class Qaoa(ParametrizedCircuit):
         grad = np.ndarray([self.lnum, 2], dtype='double')
         # run circuit
         myrange = progbar_range(hide_progbar)
-        for i in myrange(self.lnum):
+        for i in np.arange(self.lnum):
             self.state.exp_ham_classical(gammas[i])
-            self.state_history[2*i] = self.state.vec
+            self.__state_history[2*i] = self.state.vec
             self.__xrot_all(betas[i])
-            self.state_history[2*i+1] = self.state.vec
+            self.__state_history[2*i+1] = self.state.vec
         # calculate expectation value
         if exact_expec_val:
             self.state.vec *= self.state.gates.classical_ham
-            expec_val = self.state_history[2*self.lnum-1].conj().dot(self.state.vec).real
+            expec_val = self.__state_history[2*self.lnum-1].conj().dot(self.state.vec).real
         else:
             expec_val = self.sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.reset()
-        for i in myrange(self.lnum):
+        for i in np.arange(self.lnum):
             i_inv = self.lnum - i - 1
             self.lhs_history[2*i] = self.lhs.matrix.asformat('array')
             self.lhs.xrot_all(betas[i_inv])
@@ -134,10 +136,10 @@ class Qaoa(ParametrizedCircuit):
             self.lhs.exp_ham_classical(gammas[i_inv])
         # calculate gradient finite-shot measurements
         component_range = np.arange(self.state.gates.classical_ham_components.shape[0])
-        for i in myrange(self.lnum):
+        for i in np.arange(self.lnum):
             # gamma[i]
             for j in component_range:
-                self.state.vec[:] = self.state_history[2*i]
+                self.state.vec[:] = self.__state_history[2*i]
                 self.state.exp_ham_classical_component(np.pi/4, j)
                 dist = np.abs(self.lhs_history[2 * (self.lnum-1-i) + 1].dot(self.state.vec))**2
                 self.samples_plus_comp[j] = self.__sample(dist, shot_num)
@@ -147,7 +149,7 @@ class Qaoa(ParametrizedCircuit):
             grad[i, 1] = (self.samples_plus_comp - self.samples_minus_comp).sum()
             # beta[i]
             for q in qrange:
-                self.state.vec[:] = self.state_history[2*i+1]
+                self.state.vec[:] = self.__state_history[2*i+1]
                 self.state.xrot(np.pi/2, q)
                 dist = np.abs(self.lhs_history[2 * (self.lnum-1-i)].dot(self.state.vec))**2
                 self.samples_plus[q] = self.__sample(dist, shot_num)
@@ -189,9 +191,6 @@ class Qaoa(ParametrizedCircuit):
                 'Wrong amount of parameters. Expected {} and {},'.format(self.lnum, self.lnum),
                 ' found {} and {}.'.format(len(betas), len(gammas))
             ))
-    def __xrot_all(self, angle):
-        for q in np.arange(self.qnum):
-            self.state.xrot(angle, q)
 
     def __sample(self, dist, shot_num):
         rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
