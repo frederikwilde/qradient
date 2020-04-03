@@ -127,7 +127,7 @@ class State:
 
     def allx(self):
         '''Multiply the sum of all x-Paulis (incl. -1.j). For derivatives.'''
-        self.vec = self.__xrot_all.dot(self.vec)
+        self.vec = self.__allx.dot(self.vec)
 
     def allx_lhs(self, angle, i):
         warnings.warn('Not implemented.')
@@ -263,77 +263,6 @@ class State:
         warnings.warn('Not implemented.')
 
     def cnot_ladder_center_matrix(self, stacking):
-        warnings.warn('Not implemented.')
-
-    ############################################################################
-    # classical Hamiltonian
-    def load_classical_ham(self, observable, include_individual_components=False):
-        '''
-        Creates a the full vector representing an observable, that is purely classical.
-
-        Args:
-            observable (Observable): An observable object.
-        '''
-        #### NEEDS TO BE REWRITTEN!!!
-        observable.check_observable(
-            known_keys=['z', 'zz'],
-            warning='Non-classical observable component found. Only \'z\' and \'zz\' are accepted in this method.'
-        )
-        # build gate
-        z = np.array([1., -1.])
-        id = lambda i: np.full(2**i, 1.)
-        self.classical_ham = np.zeros(2**self.__qnum, dtype='double')
-        component_list = []
-        if 'z' in observable.info:
-            for i, weight in enumerate(self.info['z']):
-                if weight is not None:
-                    component = weight * _nkr(id(i), _nkr(z, id(self.__qnum-i-1)))
-                    self.classical_ham += component
-                    if include_individual_components:
-                        component_list.append(component)
-        if 'zz' in observable.info:
-            for i in range(self.__qnum):
-                for j in range(i+1, self.__qnum):
-                    if observable.info['zz'][i, j] is not None:
-                        component = observable.info['zz'][i, j] * _nkr(
-                            id(i),
-                            _nkr(z, _nkr(id(j-i-1), _nkr(z, id(self.__qnum-j-1))))
-                        )
-                        self.classical_ham += component
-                        if include_individual_components:
-                            component_list.append(component)
-        if include_individual_components:
-            self.classical_ham_components = np.array(component_list)
-        return self
-
-    def rot_classical_ham(self, angle):
-        '''Rotate around a classical Hamiltonian, as done in QAOA.'''
-        self.vec *= np.exp(-1.j * angle * self.classical_ham)
-
-    def rot_classical_ham_lhs(self, angle):
-        warnings.warn('Not implemented.')
-
-    def rot_classical_ham_center_matrix(self, angle):
-        warnings.warn('Not implemented.')
-
-    def rot_classical_ham_component(self, angle, i):
-        '''Rotate around a classical Hamiltonian component, as done in QAOA.'''
-        self.vec *= np.exp(-1.j * angle * self.classical_ham_components[i])
-
-    def rot_classical_ham_component_lhs(self, angle, i):
-        warnings.warn('Not implemented.')
-
-    def rot_classical_ham_component_center_matrix(self, angle, i):
-        warnings.warn('Not implemented.')
-
-    def classical_ham(self):
-        '''Multiply a classical Hamiltonian (incl. -1.j) with the state. For derivatives.'''
-        self.vec *= -1.j * self.classical_ham
-
-    def classical_ham_lhs(self):
-        warnings.warn('Not implemented.')
-
-    def classical_ham_center_matrix(self):
         warnings.warn('Not implemented.')
 
     ############################################################################
