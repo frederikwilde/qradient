@@ -1,8 +1,6 @@
 from .base import ParametrizedCircuit
 from qradient.physical_components import State
 import numpy as np
-import scipy.sparse as sp
-from scipy import stats
 import warnings
 
 
@@ -30,6 +28,7 @@ class Qaoa(ParametrizedCircuit):
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
                 self._state_history[2*i+1] = self.state.vec
                 self.__allxrot(betas[i])
+            self._state_history[2*self._lnum] = self.state.vec
         else:
             for i in np.arange(self._lnum):
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
@@ -72,12 +71,11 @@ class Qaoa(ParametrizedCircuit):
         grad = np.ndarray([self._lnum, 2], dtype='double')
         # run circuit
         self.__run(betas, gammas, save_history=True)
-        self._state_history[2*self._lnum] = self.state.vec
         # calculate expecation value
         self.state.vec = self.observable.dot(self.state.vec)
         if expec_val_component is not None:
             self._tmp_active_component = self.observable.active_component
-            self.observable.active_component = expec_val_shotnum
+            self.observable.active_component = expec_val_component
             expec_val = self.observable.expectation_value(
                 self._state_history[2*self._lnum],
                 shot_num=expec_val_shotnum
@@ -105,7 +103,7 @@ class Qaoa(ParametrizedCircuit):
             self.state.vec[:] = self._tmp_vec
         return expec_val, grad
 
-    def gradient_sample(self, betas, gammas, grad_shot_num=1, expec_val_shotnum=0):
+    def gradient_sample(self, betas, gammas, grad_shot_num=1, expec_val_shotnum=0, expec_val_component=None):
         warnings.warn('Not implemented yet.')
 
     def __check_parameters(self, betas, gammas):
