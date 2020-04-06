@@ -7,7 +7,7 @@ import warnings
 
 
 class Qaoa(ParametrizedCircuit):
-    def __init__(self, qubit_number, observable, layer_number):
+    def __init__(self, observable, layer_number):
         ParametrizedCircuit.init(self, observable)
         self.state = State(self.__qnum, ini='+')
         self.state.load_xrots()
