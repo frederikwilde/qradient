@@ -8,16 +8,15 @@ import warnings
 
 class Qaoa(ParametrizedCircuit):
     def __init__(self, observable, layer_number):
-        ParametrizedCircuit.init(self, observable)
-        self.state = State(self.__qnum, ini='+')
+        self._read_observable(observable)
+        self.state = State(self._qnum, ini='+')
         self.state.load_xrots()
         self.state.load_allx()
-        self.state.load_classical_ham(observable)
-        self.__lnum = layer_number
-        self.__state_history = np.ndarray([2*self.lnum+1, 2**self.qnum], dtype='complex')
+        self._lnum = layer_number
+        self._state_history = np.ndarray([2*self._lnum+1, 2**self._qnum], dtype='complex')
 
     def __allxrot(self, angle):
-        for q in np.arange(self.qnum):
+        for q in np.arange(self._qnum):
             self.state.xrot(angle, q)
 
     def __run(self, betas, gammas, save_history=False):
@@ -26,15 +25,15 @@ class Qaoa(ParametrizedCircuit):
         state_history if specified.
         '''
         if save_history:
-            for i in np.arange(self.lnum):
-                self.__state_history[2*i] = self.state.vec
+            for i in np.arange(self._lnum):
+                self._state_history[2*i] = self.state.vec
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
-                self.__state_history[2*i+1] = self.state.vec
+                self._state_history[2*i+1] = self.state.vec
                 self.__allxrot(betas[i])
         else:
-            for i in np.arange(self.lnum):
+            for i in np.arange(self._lnum):
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
-                self.state.__allxrot(betas[i])
+                self.__allxrot(betas[i])
 
     def run(self, betas, gammas, shot_num=0):
         '''
@@ -66,31 +65,31 @@ class Qaoa(ParametrizedCircuit):
         '''
         self.state.reset()
         self.__check_parameters(betas, gammas)
-        grad = np.ndarray([self.lnum, 2], dtype='double')
+        grad = np.ndarray([self._lnum, 2], dtype='double')
         # run circuit
         self.__run(betas, gammas, save_history=True)
-        self.__state_history[2*self.lnum] = self.state.vec
+        self._state_history[2*self._lnum] = self.state.vec
         # calculate expecation value
         self.state.vec = self.observable.dot(self.state.vec)
         if expec_val_shotnum == 0:
-            expec_val = self.__state_history[2*self.lnum].conj().dot(self.state.vec).real
+            expec_val = self._state_history[2*self._lnum].conj().dot(self.state.vec).real
         else:
             expec_val = self.observable.expectation_value(
-                self.__state_history[2*self.lnum],
+                self._state_history[2*self._lnum],
                 shot_num=expec_val_shotnum
             )
         # calculate gradient
-        for i in np.arange(self.lnum-1, -1, -1):
-            self.__xrot_all(-betas[i])
-            self.__tmp_vec[:] = self.state.vec
+        for i in np.arange(self._lnum-1, -1, -1):
+            self.__allxrot(-betas[i])
+            self._tmp_vec[:] = self.state.vec
             self.state.allx()
-            grad[i, 0] = -2. * self.__state_history[2*i+1].conj().dot(self.state.vec).real
-            self.state.vec[:] = self.__tmp_vec
+            grad[i, 0] = -2. * self._state_history[2*i+1].conj().dot(self.state.vec).real
+            self.state.vec[:] = self._tmp_vec
             self.state.vec = self.observable.exp_dot(-gammas[i], self.state.vec)
-            self.__tmp_vec[:] = self.state.vec
+            self._tmp_vec[:] = self.state.vec
             self.state.vec = self.observable.dot(-1.j * self.state.vec)
-            grad[i, 1] = -2. * self.__state_history[2*i].conj().dot(self.state.vec).real
-            self.state.vec[:] = self.__tmp_vec
+            grad[i, 1] = -2. * self._state_history[2*i].conj().dot(self.state.vec).real
+            self.state.vec[:] = self._tmp_vec
         return expec_val, grad
 
     def sample_grad(
@@ -117,66 +116,66 @@ class Qaoa(ParametrizedCircuit):
         if not self.has_loaded_eigensystem:
             self.eigenvalues = self.state.gates.classical_ham
             self.lhs = Qaoa.LeftHandSide(
-                sp.identity(2**self.qnum, dtype='complex', format='csr'),
+                sp.identity(2**self._qnum, dtype='complex', format='csr'),
                 self.state.gates
             )
-            self.lhs_history = np.ndarray([2*self.lnum, 2**self.qnum, 2**self.qnum], dtype='complex')
+            self.lhs_history = np.ndarray([2*self._lnum, 2**self._qnum, 2**self._qnum], dtype='complex')
             self.lhs_history[0] = self.lhs.ini_matrix.asformat('array')
             # for collecting samples
             self.samples_plus_comp = np.ndarray(self.state.gates.classical_ham_components.shape[0], dtype='double')
             self.samples_minus_comp = np.ndarray(self.state.gates.classical_ham_components.shape[0], dtype='double')
-            self.samples_plus = np.ndarray(self.qnum, dtype='double')
-            self.samples_minus = np.ndarray(self.qnum, dtype='double')
+            self.samples_plus = np.ndarray(self._qnum, dtype='double')
+            self.samples_minus = np.ndarray(self._qnum, dtype='double')
             self.has_loaded_eigensystem = True
-        qrange = np.arange(self.qnum)
+        qrange = np.arange(self._qnum)
         # prepare to run circuit
         if ini_state is None:
             self.state.reset()
         else:
             self.state.vec = ini_state
-        grad = np.ndarray([self.lnum, 2], dtype='double')
+        grad = np.ndarray([self._lnum, 2], dtype='double')
         # run circuit
         myrange = progbar_range(hide_progbar)
-        for i in np.arange(self.lnum):
+        for i in np.arange(self._lnum):
             self.state.exp_ham_classical(gammas[i])
-            self.__state_history[2*i] = self.state.vec
-            self.__xrot_all(betas[i])
-            self.__state_history[2*i+1] = self.state.vec
+            self._state_history[2*i] = self.state.vec
+            self.__allxrot(betas[i])
+            self._state_history[2*i+1] = self.state.vec
         # calculate expectation value
         if exact_expec_val:
             self.state.vec *= self.state.gates.classical_ham
-            expec_val = self.__state_history[2*self.lnum-1].conj().dot(self.state.vec).real
+            expec_val = self._state_history[2*self._lnum-1].conj().dot(self.state.vec).real
         else:
             expec_val = self.sample_expec_val(shot_num)
         # run reverse circuit
         self.lhs.reset()
-        for i in np.arange(self.lnum):
-            i_inv = self.lnum - i - 1
+        for i in np.arange(self._lnum):
+            i_inv = self._lnum - i - 1
             self.lhs_history[2*i] = self.lhs.matrix.asformat('array')
             self.lhs.xrot_all(betas[i_inv])
             self.lhs_history[2*i+1] = self.lhs.matrix.asformat('array')
             self.lhs.exp_ham_classical(gammas[i_inv])
         # calculate gradient finite-shot measurements
         component_range = np.arange(self.state.gates.classical_ham_components.shape[0])
-        for i in np.arange(self.lnum):
+        for i in np.arange(self._lnum):
             # gamma[i]
             for j in component_range:
-                self.state.vec[:] = self.__state_history[2*i]
+                self.state.vec[:] = self._state_history[2*i]
                 self.state.exp_ham_classical_component(np.pi/4, j)
-                dist = np.abs(self.lhs_history[2 * (self.lnum-1-i) + 1].dot(self.state.vec))**2
+                dist = np.abs(self.lhs_history[2 * (self._lnum-1-i) + 1].dot(self.state.vec))**2
                 self.samples_plus_comp[j] = self.__sample(dist, shot_num)
                 self.state.exp_ham_classical_component(-np.pi/2, j)
-                dist = np.abs(self.lhs_history[2 * (self.lnum-1-i) + 1].dot(self.state.vec))**2
+                dist = np.abs(self.lhs_history[2 * (self._lnum-1-i) + 1].dot(self.state.vec))**2
                 self.samples_minus_comp[j] = self.__sample(dist, shot_num)
             grad[i, 1] = (self.samples_plus_comp - self.samples_minus_comp).sum()
             # beta[i]
             for q in qrange:
-                self.state.vec[:] = self.__state_history[2*i+1]
+                self.state.vec[:] = self._state_history[2*i+1]
                 self.state.xrot(np.pi/2, q)
-                dist = np.abs(self.lhs_history[2 * (self.lnum-1-i)].dot(self.state.vec))**2
+                dist = np.abs(self.lhs_history[2 * (self._lnum-1-i)].dot(self.state.vec))**2
                 self.samples_plus[q] = self.__sample(dist, shot_num)
                 self.state.xrot(-np.pi, q)
-                dist = np.abs(self.lhs_history[2 * (self.lnum-1-i)].dot(self.state.vec))**2
+                dist = np.abs(self.lhs_history[2 * (self._lnum-1-i)].dot(self.state.vec))**2
                 self.samples_minus[q] = self.__sample(dist, shot_num)
             grad[i, 0] = .5 * (self.samples_plus - self.samples_minus).sum()
         return expec_val, grad
@@ -208,12 +207,12 @@ class Qaoa(ParametrizedCircuit):
     # end LeftHandSide
 
     def __check_parameters(self, betas, gammas):
-        if (betas.size != self.lnum) or (gammas.size != self.lnum):
+        if (betas.size != self._lnum) or (gammas.size != self._lnum):
             raise ValueError((
-                'Wrong amount of parameters. Expected {} and {},'.format(self.lnum, self.lnum),
+                'Wrong amount of parameters. Expected {} and {},'.format(self._lnum, self._lnum),
                 ' found {} and {}.'.format(len(betas), len(gammas))
             ))
 
     def __sample(self, dist, shot_num):
-        rnd_var = stats.rv_discrete(values=(np.arange(2**self.qnum), dist))
+        rnd_var = stats.rv_discrete(values=(np.arange(2**self._qnum), dist))
         return (self.eigenvalues[rnd_var.rvs(size=shot_num)]).mean()

@@ -5,7 +5,8 @@ import numpy as np
 class ParametrizedCircuit:
     '''Parent class for VQE circuits. Not meant for instantiation.'''
 
-    def init(self, observable):
-        self.__qnum = next(iter(observable.values())).shape[0]
+    def _read_observable(self, observable):
+        self._qnum = next(iter(observable.values())).shape[0]
+        print(self)
         self.observable = Observable(observable)
-        self.__tmp_vec = np.ndarray(2**self.__qnum, dtype='complex')
+        self._tmp_vec = np.ndarray(2**self._qnum, dtype='complex')

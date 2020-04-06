@@ -278,7 +278,7 @@ class Observable:
             raise AttributeError('exp_dot is only implemented for classical observables.')
         if self.active_component == -1:
             if array.ndim == 1:
-                return np.exp(-1.j * angle * self.matrix.data) * array
+                return np.exp(-1.j * angle * self.matrix.data[0]) * array
             else:
                 return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array)
         elif self.active_component > -1:
@@ -286,12 +286,12 @@ class Observable:
             if array.ndim == 1:
                 return np.exp(
                     -1.j * angle * self.component_weights[self.active_component] * \
-                        self.components[self.active_component].data
+                    self.components[self.active_component].data[0]
                 ) * array
             else:
                 return sp.diags(np.exp(
                     -1.j * angle * self.component_weights[self.active_component] * \
-                        self.components[self.active_component].data
+                    self.components[self.active_component].data
                 )).dot(array)
         else:
             raise ValueError('active_component attribute invalid: {}'.format(self.active_component))
@@ -388,7 +388,7 @@ def _weight_check(weight, observable_component):
 
 
 _kr = sp.kron
-_id = lambda i: _id(2**i, dtype='complex', format='coo')
+_id = lambda i: sp.identity(i, dtype='complex', format='coo')
 _x = sp.csr_matrix([[0., 1.], [1., 0.]], dtype='complex')
 _y = sp.csr_matrix([[0., -1.j], [1.j, 0.]], dtype='complex')
 _z = sp.csr_matrix([[1., 0.], [0., -1.]], dtype='complex')
