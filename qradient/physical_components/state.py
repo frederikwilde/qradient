@@ -257,7 +257,7 @@ class State:
                 2-3, ... and 1-2, 3-4, ... in the second layer) for stacking=0.
                 For stacking=1 the order is reversed.
         '''
-        self.vec = self.cnot_ladder[stacking].dot(self.vec)
+        self.vec = self.__cnot_ladder[stacking].dot(self.vec)
 
     def cnot_ladder_lhs(self, stacking):
         warnings.warn('Not implemented.')

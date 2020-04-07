@@ -94,7 +94,7 @@ class Observable:
                         ))
                 for j in range(i+1, self.__qnum):
                     if self.dict['zz'][i, j] is not None:
-                        _weight_check(self.dict['zz'][i, j], 'y')
+                        _weight_check(self.dict['zz'][i, j], 'zz')
                         op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
                         op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                         self.matrix += self.dict['zz'][i, j] * op
@@ -138,7 +138,7 @@ class Observable:
                             ))
                     for j in range(i+1, self.__qnum):
                         if self.dict['zz'][i, j] is not None:
-                            _weight_check(self.dict['zz'][i, j], 'y')
+                            _weight_check(self.dict['zz'][i, j], 'zz')
                             op = _kr(_kr(_id(2**i), _z), _id(2**(j-i-1)))
                             op = _kr(_kr(op, _z), _id(2**(self.__qnum-j-1)))
                             component_list.append(op)

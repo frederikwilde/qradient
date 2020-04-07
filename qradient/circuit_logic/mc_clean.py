@@ -6,9 +6,9 @@ from scipy import stats
 import warnings
 
 class McClean(ParametrizedCircuit):
-    def __init__(self, observable, layer_number, axes):
+    def __init__(self, observable, axes):
         self._read_observable(observable)
-        self._lnum = layer_number
+        self._lnum = axes.shape[0]
         # collect kwargs
         self.axes = axes
         self.state = State(self._qnum)
@@ -96,12 +96,12 @@ class McClean(ParametrizedCircuit):
         for i in np.arange(self._lnum-1, -1, -1):
             for q in np.arange(self._qnum):
                 self.__rot(i, q, -angles[i, q])
-            self.tmp_vec[:] = self.state.vec
+            self._tmp_vec[:] = self.state.vec
             for q in np.arange(self._qnum):
                 self.__rot(i, q, angles[i, q])
                 self.__drot(i, q, -angles[i, q])
                 grad[i, q] = -2. * self._state_history[i].conj().dot(self.state.vec).real # -1 due to dagger of derivative
-                self.state.vec[:] = self.tmp_vec
+                self.state.vec[:] = self._tmp_vec
             self.state.cnot_ladder(1)
         return expec_val, grad
 
