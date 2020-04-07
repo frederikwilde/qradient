@@ -253,8 +253,8 @@ class State:
         Applies a one-dimensional ladder of CNOT gates
 
         Args:
-            stacking (int): The even to uneven qubits are coupled first (i.e. 0-1,
-                2-3, ... and 1-2, 3-4, ... in the second layer) for stacking=0.
+            stacking (int): The even to uneven qubits are coupled first (i.e. 1-2,
+                3-4, ... and 0-1, 2-3, ... in the second layer) for stacking=0.
                 For stacking=1 the order is reversed.
         '''
         self.vec = self.__cnot_ladder[stacking].dot(self.vec)
