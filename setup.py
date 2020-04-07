@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup  # , Extension
 # from Cython.Build import cythonize
 
 # CYTHON COMPILATION
@@ -21,7 +21,6 @@ setup(
     packages=['qradient'],
     install_requires=[
         'scipy',
-        'tqdm',
         # 'Cython'
     ],
     # zip_safe=False
