@@ -14,10 +14,6 @@ class Qaoa(ParametrizedCircuit):
         self._lnum = layer_number
         self._state_history = np.ndarray([2*self._lnum+1, 2**self._qnum], dtype='complex')
 
-    def __allxrot(self, angle):
-        for q in np.arange(self._qnum):
-            self.state.xrot(angle, q)
-
     def __run(self, betas, gammas, save_history=False):
         '''
         Only runs the circuit on the current state and saves to
@@ -28,12 +24,38 @@ class Qaoa(ParametrizedCircuit):
                 self._state_history[2*i] = self.state.vec
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
                 self._state_history[2*i+1] = self.state.vec
-                self.__allxrot(betas[i])
+                self.state.allxrot(betas[i])
             self._state_history[2*self._lnum] = self.state.vec
         else:
             for i in np.arange(self._lnum):
                 self.state.vec = self.observable.exp_dot(gammas[i], self.state.vec)
-                self.__allxrot(betas[i])
+                self.state.allxrot(betas[i])
+
+    def __expec_val(self, expec_val_component, expec_val_shotnum):
+        '''
+        Calculates the expectation value after __run has been executed with
+        active history saving along with multiplication of the state vector with
+        the observable.
+        This is useful for the gradient methods as one might want a different
+        shot number or component to compute the expectation value.
+        '''
+        if expec_val_component is not None:
+            self._tmp_active_component = self.observable.active_component
+            self.observable.active_component = expec_val_component
+            expec_val = self.observable.expectation_value(
+                self._state_history[2*self._lnum],
+                shot_num=expec_val_shotnum
+            )
+            self.observable.active_component = self._tmp_active_component
+            return expec_val
+        else:
+            if expec_val_shotnum == 0:
+                return self._state_history[2*self._lnum].conj().dot(self.state.vec).real
+            else:
+                return self.observable.expectation_value(
+                    self._state_history[2*self._lnum],
+                    shot_num=expec_val_shotnum
+                )
 
     def run(self, betas, gammas, shot_num=0):
         '''
@@ -77,7 +99,7 @@ class Qaoa(ParametrizedCircuit):
         expec_val = self.__expec_val(expec_val_component, expec_val_shotnum)
         # calculate gradient
         for i in np.arange(self._lnum-1, -1, -1):
-            self.__allxrot(-betas[i])
+            self.state.allxrot(-betas[i])
             self._tmp_vec[:] = self.state.vec
             self.state.allx()
             grad[i, 0] = -2. * self._state_history[2*i+1].conj().dot(self.state.vec).real
@@ -156,25 +178,6 @@ class Qaoa(ParametrizedCircuit):
                     )
                     self.state.clean_center_matrix()
         return expec_val, grad
-
-    def __expec_val(self, expec_val_component, expec_val_shotnum):
-        if expec_val_component is not None:
-            self._tmp_active_component = self.observable.active_component
-            self.observable.active_component = expec_val_component
-            expec_val = self.observable.expectation_value(
-                self._state_history[2*self._lnum],
-                shot_num=expec_val_shotnum
-            )
-            self.observable.active_component = self._tmp_active_component
-            return expec_val
-        else:
-            if expec_val_shotnum == 0:
-                return self._state_history[2*self._lnum].conj().dot(self.state.vec).real
-            else:
-                return self.observable.expectation_value(
-                    self._state_history[2*self._lnum],
-                    shot_num=expec_val_shotnum
-                )
 
     def __check_parameters(self, betas, gammas):
         if (betas.size != self._lnum) or (gammas.size != self._lnum):

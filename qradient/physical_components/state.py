@@ -98,6 +98,10 @@ class State:
     def xrot_center_matrix(self, angle, i):
         warnings.warn('Not implemented.')
 
+    def allxrot(self, angle):
+        for q in np.arange(self.__qnum):
+            self.xrot(angle, q)
+
     def allxrot_center_matrix(self, angle):
         warnings.warn('Not implemented.')
 
