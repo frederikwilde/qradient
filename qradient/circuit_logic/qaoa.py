@@ -1,5 +1,6 @@
 from .base import ParametrizedCircuit
 from qradient.physical_components import State
+import scipy.sparse as sp
 import numpy as np
 import warnings
 
@@ -103,8 +104,48 @@ class Qaoa(ParametrizedCircuit):
             self.state.vec[:] = self._tmp_vec
         return expec_val, grad
 
-    def gradient_sample(self, betas, gammas, grad_shot_num=1, expec_val_shotnum=0, expec_val_component=None):
-        warnings.warn('Not implemented yet.')
+    def gradient_ps_rule(
+        self,
+        betas,
+        gammas,
+        grad_shot_num=1,
+        expec_val_shotnum=0,
+        expec_val_component=None
+    ):
+        self.__check_parameters()
+        self.state.reset()
+        self.observable.load_projectors()
+        self.state.activate_center_matrix()
+        grad = np.ndarray([self._lnum, 2], dtype='double')
+        # run circuit on state
+        self.__run(betas, gammas, save_history=True)
+        # run circuit on center matrix
+        for i, p in np.ndenumerate(self.observable.projectors):
+            self.state.center_matrix = p.copy()
+            for j in np.arange(self._lnum, -1, -1):
+                self.state.vec = self._state_history[2*j]  # state after xrot
+                deriv = 0.
+                for q in np.arange(self._qnum):
+                    self.state.xrot(np.pi/2, q)
+                    prob_front = self.state.vec.conj().dot(
+                        self.state.center_matrix.dot(self.state.vec)
+                    )
+                    # rotate by -pi/2
+                    self.state.xrot(-np.pi, q)
+                    prob_back = self.state.vec.conj().dot(
+                        self.state.center_matrix.dot(self.state.vec)
+                    )
+
+                    deriv =
+
+                self.state.allxrot_center_matrix(betas[self._lnum-j-1])
+                self.state.center_matrix = self.observable.exp_dot(
+                    -gammas[self._lnum-j-1],
+                    self.state.center_matrix,
+                    sandwich=True
+                )
+                self.state.clean_center_matrix()
+
 
     def __check_parameters(self, betas, gammas):
         if (betas.size != self._lnum) or (gammas.size != self._lnum):

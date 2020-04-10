@@ -259,9 +259,9 @@ class Observable:
                 'Invalid active_component attribute: {}'.format(self.active_component)
             )
 
-    def exp_dot(self, angle, array):
+    def exp_dot(self, angle, array, sandwich=False):
         '''
-        Multiplies the active_component of observable with -1.j*angle and
+        Multiplies the full observable matrix with -1.j*angle and
         applies its exponential with array.
 
         Only implemented for classical
@@ -270,31 +270,33 @@ class Observable:
         Args:
             angle (np.float64): Rotation angle.
             array (np.ndarray): Vector or matrix.
+            sandwich (bool):
+                Only works if array is 2 dimensional. Default is False. If
+                True, exp(-1j*angle*matrix) will be multiplied from the left
+                and exp(1j*angle*matrix) will be multiplied from the right.
 
         Returns:
             np.ndarray: Of same shape as input array.
         '''
         if not self.__is_classical:
             raise AttributeError('exp_dot is only implemented for classical observables.')
-        if self.active_component == -1:
-            if array.ndim == 1:
-                return np.exp(-1.j * angle * self.matrix.data[0]) * array
+        if array.ndim == 1:
+            if sandwich:
+                warnings.warn('Ignoring sandwich argument as input array is 1-dimensional.')
+            return np.exp(-1.j * angle * self.matrix.data[0]) * array
+        elif array.ndim == 2:
+            if sandwich:
+                return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array).dot(
+                    sp.diags(np.exp(1.j * angle * self.matrix.data))
+                )
             else:
                 return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array)
-        elif self.active_component > -1:
-            self.load_components()
-            if array.ndim == 1:
-                return np.exp(
-                    -1.j * angle * self.component_weights[self.active_component] * \
-                    self.components[self.active_component].data[0]
-                ) * array
-            else:
-                return sp.diags(np.exp(
-                    -1.j * angle * self.component_weights[self.active_component] * \
-                    self.components[self.active_component].data
-                )).dot(array)
         else:
-            raise ValueError('active_component attribute invalid: {}'.format(self.active_component))
+            raise ValueError((
+                'Only 1 and 2 dimensional arrays can be passed.',
+                'Dimension was {}'.format(array.ndim)
+            ))
+
 
     def __check_observable(self, known_keys, warning=None):
         '''

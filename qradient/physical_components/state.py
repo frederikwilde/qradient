@@ -52,15 +52,6 @@ class State:
         if not hasattr(self, 'center_matrix'):
             self.center_matrix = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
 
-    def set_center_matrix(self, matrix):
-        '''
-        Updates the center-matrix (if activated) to matrix.
-        Also stores the matrix for the reset method.
-        '''
-        if not hasattr(self, 'center_matrix'):
-            raise AttributeError('center_matrix is not initialized yet.')
-        self.center_matrix = matrix.copy()
-
     def reset(self):
         '''
         Resets the state vector and left-hand-side and center matrix, if
@@ -105,6 +96,9 @@ class State:
         warnings.warn('Not implemented.')
 
     def xrot_center_matrix(self, angle, i):
+        warnings.warn('Not implemented.')
+
+    def allxrot_center_matrix(self, angle):
         warnings.warn('Not implemented.')
 
     ############################################################################
