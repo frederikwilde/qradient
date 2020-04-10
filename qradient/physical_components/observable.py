@@ -237,7 +237,7 @@ class Observable:
                     'Invalid active_component attribute: {}'.format(self.active_component)
                 )
 
-    def dot(self, array):
+    def dot_component(self, array):
         '''
         Multiplies the array (vector or matrix) with the active component as
         specified in the active_component attribute (-1 implies all components
@@ -297,6 +297,8 @@ class Observable:
                 'Dimension was {}'.format(array.ndim)
             ))
 
+    def exp_dot_component(self, angle, component, vec):
+        warnings.warn('Not implemented.')
 
     def __check_observable(self, known_keys, warning=None):
         '''

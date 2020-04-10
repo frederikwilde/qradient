@@ -1,4 +1,4 @@
-from .base import ParametrizedCircuit
+from .base import ParametrizedCircuit, binary_sample
 from qradient.physical_components import State
 import scipy.sparse as sp
 import numpy as np
@@ -73,23 +73,8 @@ class Qaoa(ParametrizedCircuit):
         # run circuit
         self.__run(betas, gammas, save_history=True)
         # calculate expecation value
-        self.state.vec = self.observable.dot(self.state.vec)
-        if expec_val_component is not None:
-            self._tmp_active_component = self.observable.active_component
-            self.observable.active_component = expec_val_component
-            expec_val = self.observable.expectation_value(
-                self._state_history[2*self._lnum],
-                shot_num=expec_val_shotnum
-            )
-            self.observable.active_component = self._tmp_active_component
-        else:
-            if expec_val_shotnum == 0:
-                expec_val = self._state_history[2*self._lnum].conj().dot(self.state.vec).real
-            else:
-                expec_val = self.observable.expectation_value(
-                    self._state_history[2*self._lnum],
-                    shot_num=expec_val_shotnum
-                )
+        self.state.vec = self.observable.dot_component(self.state.vec)
+        expec_val = self.__expec_val(expec_val_component, expec_val_shotnum)
         # calculate gradient
         for i in np.arange(self._lnum-1, -1, -1):
             self.__allxrot(-betas[i])
@@ -99,7 +84,7 @@ class Qaoa(ParametrizedCircuit):
             self.state.vec[:] = self._tmp_vec
             self.state.vec = self.observable.exp_dot(-gammas[i], self.state.vec)
             self._tmp_vec[:] = self.state.vec
-            self.state.vec = self.observable.dot(-1.j * self.state.vec)
+            self.state.vec = self.observable.matrix.dot(-1.j * self.state.vec)
             grad[i, 1] = -2. * self._state_history[2*i].conj().dot(self.state.vec).real
             self.state.vec[:] = self._tmp_vec
         return expec_val, grad
@@ -116,14 +101,24 @@ class Qaoa(ParametrizedCircuit):
         self.state.reset()
         self.observable.load_projectors()
         self.state.activate_center_matrix()
-        grad = np.ndarray([self._lnum, 2], dtype='double')
+        grad = np.zeros([self._lnum, 2], dtype='double')
         # run circuit on state
         self.__run(betas, gammas, save_history=True)
-        # run circuit on center matrix
-        for i, p in np.ndenumerate(self.observable.projectors):
+        # calculate expecation value
+        self.state.vec = self.observable.dot_component(self.state.vec)
+        expec_val = self.__expec_val(expec_val_component, expec_val_shotnum)
+        # determine the components to measure
+        if self.observable.active_component == -1:
+            projector_list = self.observable.projectors
+            weight_list = self.observable.projector_weights
+        else:
+            projector_list = self.observable.projectors[self.observable.active_component]
+            weight_list = self.observable.projector_weights[self.observable.active_component]
+        # run the circuit on center_matrix and calculate the gradient
+        for i, p in np.ndenumerate(projector_list):
             self.state.center_matrix = p.copy()
-            for j in np.arange(self._lnum, -1, -1):
-                self.state.vec = self._state_history[2*j]  # state after xrot
+            for j in np.arange(self._lnum-1, -1, -1):
+                self.state.vec = self._state_history[2*j+2]  # state after xrot
                 deriv = 0.
                 for q in np.arange(self._qnum):
                     self.state.xrot(np.pi/2, q)
@@ -135,17 +130,51 @@ class Qaoa(ParametrizedCircuit):
                     prob_back = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
                     )
+                    deriv += binary_sample(prob_front, grad_shot_num) - \
+                        binary_sample(prob_back, grad_shot_num)
+                grad[j, 0] += weight_list[i] * deriv
+                self.state.allxrot_center_matrix(betas[j])
+                self.state.vec = self._state_history[2*j+1]  # state after ham rot
+                deriv = 0.
+                for k in np.arange(self.observable.component_number):
+                    self.state.vec = self.observable.exp_dot_component(np.pi/4, k, self.state.vec)  # see about weights!!!
+                    prob_front = self.state.vec.conj().dot(
+                        self.state.center_matrix.dot(self.state.vec)
+                    )
+                    self.state.vec = self.observable.exp_dot_component(-np.pi/2, k, self.state.vec)
+                    prob_back = self.state.vec.conj().dot(
+                        self.state.center_matrix.dot(self.state.vec)
+                    )
+                    deriv += binary_sample(prob_front, grad_shot_num) - \
+                        binary_sample(prob_back, grad_shot_num)
+                grad[j, 1] += weight_list * deriv
+                if not j == 0:
+                    self.state.center_matrix = self.observable.exp_dot(
+                        -gammas[j],
+                        self.state.center_matrix,
+                        sandwich=True
+                    )
+                    self.state.clean_center_matrix()
+        return expec_val, grad
 
-                    deriv =
-
-                self.state.allxrot_center_matrix(betas[self._lnum-j-1])
-                self.state.center_matrix = self.observable.exp_dot(
-                    -gammas[self._lnum-j-1],
-                    self.state.center_matrix,
-                    sandwich=True
+    def __expec_val(self, expec_val_component, expec_val_shotnum):
+        if expec_val_component is not None:
+            self._tmp_active_component = self.observable.active_component
+            self.observable.active_component = expec_val_component
+            expec_val = self.observable.expectation_value(
+                self._state_history[2*self._lnum],
+                shot_num=expec_val_shotnum
+            )
+            self.observable.active_component = self._tmp_active_component
+            return expec_val
+        else:
+            if expec_val_shotnum == 0:
+                return self._state_history[2*self._lnum].conj().dot(self.state.vec).real
+            else:
+                return self.observable.expectation_value(
+                    self._state_history[2*self._lnum],
+                    shot_num=expec_val_shotnum
                 )
-                self.state.clean_center_matrix()
-
 
     def __check_parameters(self, betas, gammas):
         if (betas.size != self._lnum) or (gammas.size != self._lnum):
