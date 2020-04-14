@@ -5,7 +5,7 @@ import scipy.sparse as sp
 from scipy import stats
 import warnings
 
-class McClean(ParametrizedCircuit):
+class RandomRotations(ParametrizedCircuit):
     def __init__(self, observable, axes):
         self._read_observable(observable)
         self._lnum = axes.shape[0]
@@ -75,7 +75,7 @@ class McClean(ParametrizedCircuit):
         # run circuit
         self.__run(angles, save_history=True)
         # calculate expectation value wrt to observable
-        self.state.vec = self.observable.dot(self.state.vec)
+        self.state.vec = self.observable.matrix.dot(self.state.vec)
         if expec_val_component is not None:
             self._tmp_active_component = self.observable.active_component
             self.observable.active_component = expec_val_component

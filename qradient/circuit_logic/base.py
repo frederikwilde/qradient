@@ -7,7 +7,6 @@ class ParametrizedCircuit:
 
     def _read_observable(self, observable):
         self._qnum = next(iter(observable.values())).shape[0]
-        print(self)
         self.observable = Observable(observable)
         self._tmp_vec = np.ndarray(2**self._qnum, dtype='complex')
 
