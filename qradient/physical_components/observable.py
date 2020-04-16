@@ -278,19 +278,26 @@ class Observable:
         Returns:
             np.ndarray: Of same shape as input array.
         '''
-        if not self.__is_classical:
-            raise AttributeError('exp_dot is only implemented for classical observables.')
+        if (not self.__is_classical) or self.matrix.getformat() != 'dia':
+            raise AttributeError((
+                'exp_dot is only implemented for classical observables.',
+                'Ensure that the observable matrix is in DIA format with non-zeros only on the main diagonal.'
+            ))
         if array.ndim == 1:
             if sandwich:
                 warnings.warn('Ignoring sandwich argument as input array is 1-dimensional.')
             return np.exp(-1.j * angle * self.matrix.data[0]) * array
         elif array.ndim == 2:
             if sandwich:
-                return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array).dot(
-                    sp.diags(np.exp(1.j * angle * self.matrix.data))
-                )
+                self.__tmp_matrix = self.matrix.copy()
+                self.__tmp_matrix.data[0] = np.exp(-1.j * angle * self.matrix.data[0])
+                self.__tmp_matrix2 = self.matrix.copy()
+                self.__tmp_matrix2.data[0] = np.exp(1.j * angle * self.matrix.data[0])
+                return self.__tmp_matrix.dot(array).dot(self.__tmp_matrix2)
             else:
-                return sp.diags(np.exp(-1.j * angle * self.matrix.data)).dot(array)
+                self.__tmp_matrix = self.matrix.copy()
+                self.__tmp_matrix.data[0] = np.exp(-1.j * angle * self.matrix.data[0])
+                return self.__tmp_matrix.dot(array)
         else:
             raise ValueError((
                 'Only 1 and 2 dimensional arrays can be passed.',
@@ -298,7 +305,26 @@ class Observable:
             ))
 
     def exp_dot_component(self, angle, component, vec):
-        warnings.warn('Not implemented.')
+        '''
+        Multiplies an input vector with the exponential of -1.j*angle*component
+        where the component is always the specified one (i.e. the active_component
+        attribute is ignored by this method!).
+
+        Args:
+            angle (np.float64): The rotation angle
+            component (int): A positive integer smaller than component_number
+            vec (np.ndarray): The input vector
+
+        Returns:
+            np.ndarray: The resulting vector.
+        '''
+        if vec.ndim != 1:
+            raise ValueError('Argument vec has to be 1-dimensional.')
+        if not self.__is_classical:
+            raise AttributeError('exp_dot_component is only implemented for classical observables.')
+        self.load_components()
+        return np.exp(-1.j*angle * self.component_weights[component]
+            * self.components[component].data[0]) * vec
 
     def __check_observable(self, known_keys, warning=None):
         '''
@@ -322,7 +348,7 @@ class Observable:
                     warnings.warn(warning)
 
 
-def _create_projector(self, key, qnum, *args):
+def _create_projector(key, qnum, *args):
     '''
     Creates a projector matrix.
 

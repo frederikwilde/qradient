@@ -43,7 +43,7 @@ class State:
         if not hasattr(self, 'lhs'):
             self.lhs = sp.identity(2**self.__qnum, dtype='complex', format='csr')
 
-    def activate_center_matrix(self):
+    def activate_center_matrix(self, track_nzz=False):
         '''
         Initializes the center-matrix to an empty matrix.
         Use set_center_matrix to fill it.
@@ -51,6 +51,11 @@ class State:
         '''
         if not hasattr(self, 'center_matrix'):
             self.center_matrix = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
+            # to avoid memory allocation during method calls. don't know whether this helps.
+            self.__tmp_csrmat = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
+            self.nnz_after_clean = []
+            self.nnz_before_clean = []
+            self.__track_nzz = track_nzz
 
     def reset(self):
         '''
@@ -71,6 +76,23 @@ class State:
         # reset center_matrix
         if hasattr(self, 'center_matrix'):
             self.center_matrix = sp.csr_matrix((2**self.__qnum, 2**self.__qnum), dtype='complex')
+            self.nnz_after_clean = []
+            self.nnz_before_clean = []
+
+    def clean_center_matrix(self):
+        '''
+        Removes all entries whose absolute values are smaller than a hard-coded
+        threshold.
+        '''
+        if self.__track_nzz:
+            self.nnz_before_clean.append(self.center_matrix.nnz)
+        for i, d in np.ndenumerate(self.center_matrix.data):
+            if np.abs(d) <= 10.**-12:
+                self.center_matrix.data[i] = 0.
+        self.center_matrix.eliminate_zeros()
+        if self.__track_nzz:
+            self.nnz_after_clean.append(self.center_matrix.nnz)
+
 
     ############################################################################
     # x rotations
@@ -96,14 +118,20 @@ class State:
         warnings.warn('Not implemented.')
 
     def xrot_center_matrix(self, angle, i):
-        warnings.warn('Not implemented.')
+        self.__tmp_csrmat = self.__xrot[i].dot(self.center_matrix)
+        s, c = np.sin(.5*angle), np.cos(.5*angle)
+        self.center_matrix = c**2 * self.center_matrix + \
+            c*s * (self.center_matrix.dot(self.__xrot[i]) - self.__tmp_csrmat) - \
+            s * self.__tmp_csrmat.dot(self.__xrot[i])
+        self.clean_center_matrix()
 
     def allxrot(self, angle):
         for q in np.arange(self.__qnum):
             self.xrot(angle, q)
 
     def allxrot_center_matrix(self, angle):
-        warnings.warn('Not implemented.')
+        for q in np.arange(self.__qnum):
+            self.xrot_center_matrix(angle, q)
 
     ############################################################################
     # Multiplication with all x summed, (x_1 + x_2 + ...)

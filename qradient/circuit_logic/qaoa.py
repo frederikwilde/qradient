@@ -117,12 +117,13 @@ class Qaoa(ParametrizedCircuit):
         gammas,
         grad_shot_num=1,
         expec_val_shotnum=0,
-        expec_val_component=None
+        expec_val_component=None,
+        **kwargs # for dev
     ):
-        self.__check_parameters()
+        self.__check_parameters(betas, gammas)
         self.state.reset()
         self.observable.load_projectors()
-        self.state.activate_center_matrix()
+        self.state.activate_center_matrix(track_nzz=kwargs.get('track_nzz', False)) # for development
         grad = np.zeros([self._lnum, 2], dtype='double')
         # run circuit on state
         self.__run(betas, gammas, save_history=True)
@@ -131,14 +132,12 @@ class Qaoa(ParametrizedCircuit):
         expec_val = self.__expec_val(expec_val_component, expec_val_shotnum)
         # determine the components to measure
         if self.observable.active_component == -1:
-            projector_list = self.observable.projectors
-            weight_list = self.observable.projector_weights
+            indeces = np.arange(self.observable.component_number)
         else:
-            projector_list = self.observable.projectors[self.observable.active_component]
-            weight_list = self.observable.projector_weights[self.observable.active_component]
+            indeces = np.array([self.observable.active_component])
         # run the circuit on center_matrix and calculate the gradient
-        for i, p in np.ndenumerate(projector_list):
-            self.state.center_matrix = p.copy()
+        for i in indeces:
+            self.state.center_matrix = self.observable.projectors[i].copy()
             for j in np.arange(self._lnum-1, -1, -1):
                 self.state.vec = self._state_history[2*j+2]  # state after xrot
                 deriv = 0.
@@ -146,15 +145,15 @@ class Qaoa(ParametrizedCircuit):
                     self.state.xrot(np.pi/2, q)
                     prob_front = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
-                    )
+                    ).real
                     # rotate by -pi/2
                     self.state.xrot(-np.pi, q)
                     prob_back = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
-                    )
+                    ).real
                     deriv += binary_sample(prob_front, grad_shot_num) - \
                         binary_sample(prob_back, grad_shot_num)
-                grad[j, 0] += weight_list[i] * deriv
+                grad[j, 0] += self.observable.projector_weights[i] * deriv
                 self.state.allxrot_center_matrix(betas[j])
                 self.state.vec = self._state_history[2*j+1]  # state after ham rot
                 deriv = 0.
@@ -162,14 +161,14 @@ class Qaoa(ParametrizedCircuit):
                     self.state.vec = self.observable.exp_dot_component(np.pi/4, k, self.state.vec)  # see about weights!!!
                     prob_front = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
-                    )
+                    ).real
                     self.state.vec = self.observable.exp_dot_component(-np.pi/2, k, self.state.vec)
                     prob_back = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
-                    )
+                    ).real
                     deriv += binary_sample(prob_front, grad_shot_num) - \
                         binary_sample(prob_back, grad_shot_num)
-                grad[j, 1] += weight_list * deriv
+                grad[j, 1] += self.observable.projector_weights[i] * deriv
                 if not j == 0:
                     self.state.center_matrix = self.observable.exp_dot(
                         -gammas[j],
