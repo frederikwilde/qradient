@@ -35,7 +35,7 @@ qubit_num, layer_num = 3, 3
 zz_interactions = np.full((qubit_num, qubit_num), None)  # empty adjacency matrix
 zz_interactions[0, 1] = 1.  # only couple the first to the second qubit
 axes = np.random.randint(0, 3, size=(layer_num, qubit_num))  # pick rotation axes
-circuit = RandomRotations({'zz': interactions}, layer_num)
+circuit = RandomRotations({'zz': interactions}, axes)
 ```
 The method whose runtimes are shown below is `circuit.gradient()`, which returns the expectation value and the full gradient of the circuit with respect to all `qubit_num * layer_num` parameters.
 

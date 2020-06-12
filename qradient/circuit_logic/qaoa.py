@@ -166,8 +166,8 @@ class Qaoa(ParametrizedCircuit):
                     prob_back = self.state.vec.conj().dot(
                         self.state.center_matrix.dot(self.state.vec)
                     ).real
-                    deriv += binary_sample(prob_front, grad_shot_num) - \
-                        binary_sample(prob_back, grad_shot_num)
+                    deriv += (binary_sample(prob_front, grad_shot_num) - \
+                        binary_sample(prob_back, grad_shot_num)) / 2.
                 grad[j, 1] += self.observable.projector_weights[i] * deriv
                 if not j == 0:
                     self.state.center_matrix = self.observable.exp_dot(
