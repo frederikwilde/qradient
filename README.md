@@ -3,7 +3,7 @@ This package provides a platform for fast simulation of parametrized quantum cir
 Also, fast optimization is facilitated by efficient gradient calculations, something that cannot be done on a physical quantum device.
 
 ## status of development
-This package is under development and many components are far from optimal. Future versions will be code-breaking.
+This package is currently not being developed any further. To work with a stable version, check out one of the tags.
 
 ## installing the package (recommendation)
 1) Clone this repository.
